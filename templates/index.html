@@ -1,177 +1,60 @@
 {% extends "base.html" %}
 
-{% block title %}Home - Bank Email Parser{% endblock %}
+{% block title %}Money Tracker - Smart Bank Transaction Management{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-12">
-        <div class="jumbotron">
-            <h1 class="display-4">Bank Email Parser & Account Tracker</h1>
-            <p class="lead">Parse transaction data from bank emails and track your accounts.</p>
-            <hr class="my-4">
-            <p>Choose one of the options below to parse your bank email.</p>
-        </div>
-    </div>
-</div>
-
-<div class="row mt-4">
-    <div class="col-md-4">
-        <div class="form-section">
-            <h3>Fetch Emails</h3>
-            <form action="{{ url_for('fetch_emails') }}" method="post">
-                <h5 class="mt-3 mb-2">Email Connection Settings</h5>
-                <div class="mb-3">
-                    <label for="email_host" class="form-label">Email Host</label>
-                    <input type="text" class="form-control" id="email_host" name="email_host" placeholder="imap.gmail.com">
-                </div>
-
-                <div class="mb-3">
-                    <label for="email_port" class="form-label">Email Port</label>
-                    <input type="number" class="form-control" id="email_port" name="email_port" placeholder="993">
-                </div>
-
-                <div class="mb-3">
-                    <label for="email_username" class="form-label">Email Username</label>
-                    <input type="email" class="form-control" id="email_username" name="email_username" placeholder="your_email@gmail.com">
-                </div>
-
-                <div class="mb-3">
-                    <label for="email_password" class="form-label">Email Password</label>
-                    <input type="password" class="form-control" id="email_password" name="email_password" placeholder="your_app_password">
-                    <div class="form-text">For Gmail, use an App Password instead of your regular password.</div>
-                </div>
-
-                <div class="mb-3 form-check">
-                    <input type="checkbox" class="form-check-input" id="email_use_ssl" name="email_use_ssl" value="true" checked>
-                    <label class="form-check-label" for="email_use_ssl">Use SSL</label>
-                </div>
-
-                <div class="mb-3">
-                    <label for="bank_email_addresses" class="form-label">Bank Email Addresses</label>
-                    <input type="text" class="form-control" id="bank_email_addresses" name="bank_email_addresses" placeholder="bankmuscat@bankmuscat.com">
-                    <div class="form-text">Comma-separated list of bank email addresses.</div>
-                </div>
-
-                <div class="mb-3">
-                    <label for="bank_email_subjects" class="form-label">Bank Email Subjects</label>
-                    <input type="text" class="form-control" id="bank_email_subjects" name="bank_email_subjects" placeholder="transaction,alert,notification">
-                    <div class="form-text">Comma-separated list of keywords to look for in email subjects.</div>
-                </div>
-
-                <h5 class="mt-4 mb-2">Fetch Settings</h5>
-                <div class="mb-3">
-                    <label for="folder" class="form-label">Email Folder</label>
-                    <input type="text" class="form-control" id="folder" name="folder" value="INBOX">
-                </div>
-
-                <div class="mb-3 form-check">
-                    <input type="checkbox" class="form-check-input" id="unread_only" name="unread_only" checked>
-                    <label class="form-check-label" for="unread_only">Only fetch unread emails</label>
-                </div>
-
-                <div class="mb-3 form-check">
-                    <input type="checkbox" class="form-check-input" id="save_to_db" name="save_to_db" checked>
-                    <label class="form-check-label" for="save_to_db">Save transactions to database</label>
-                </div>
-
-                <button type="submit" class="btn btn-primary">Fetch Emails</button>
-                <div class="form-text mt-2">This will connect to your email account and fetch bank emails.</div>
-            </form>
-        </div>
-    </div>
-
-    <div class="col-md-4">
-        <div class="form-section">
-            <h3>Paste Email Content</h3>
-            <form action="{{ url_for('parse_email') }}" method="post">
-                <input type="hidden" name="source" value="paste">
-
-                <div class="mb-3">
-                    <label for="subject" class="form-label">Email Subject (optional)</label>
-                    <input type="text" class="form-control" id="subject" name="subject" placeholder="Transaction Alert">
-                </div>
-
-                <div class="mb-3">
-                    <label for="from" class="form-label">From (optional)</label>
-                    <input type="text" class="form-control" id="from" name="from" placeholder="bank@example.com">
-                </div>
-
-                <div class="mb-3">
-                    <label for="email_content" class="form-label">Email Content *</label>
-                    <textarea class="form-control" id="email_content" name="email_content" rows="10" required></textarea>
-                    <div class="form-text">Paste the full email content including headers and body.</div>
-                </div>
-
-                <div class="mb-3 form-check">
-                    <input type="checkbox" class="form-check-input" id="save_to_db" name="save_to_db" value="yes">
-                    <label class="form-check-label" for="save_to_db">Save transaction to database</label>
-                </div>
-
-                <button type="submit" class="btn btn-primary">Parse Email</button>
-            </form>
-        </div>
-    </div>
-
-    <div class="col-md-4">
-        <div class="form-section">
-            <h3>Upload Email File</h3>
-            <form action="{{ url_for('parse_email') }}" method="post" enctype="multipart/form-data">
-                <input type="hidden" name="source" value="upload">
-
-                <div class="mb-3">
-                    <label for="from" class="form-label">From (optional)</label>
-                    <input type="text" class="form-control" id="from" name="from" placeholder="bank@example.com">
-                </div>
-
-                <div class="mb-3">
-                    <label for="email_file" class="form-label">Email File *</label>
-                    <input class="form-control" type="file" id="email_file" name="email_file" required>
-                    <div class="form-text">Upload a text file containing the email content.</div>
-                </div>
-
-                <div class="mb-3 form-check">
-                    <input type="checkbox" class="form-check-input" id="save_to_db" name="save_to_db" value="yes">
-                    <label class="form-check-label" for="save_to_db">Save transaction to database</label>
-                </div>
-
-                <button type="submit" class="btn btn-primary">Parse Email</button>
-            </form>
-        </div>
-    </div>
-</div>
-
-<div class="row mt-4">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <h3>Instructions</h3>
+<div class="container py-5">
+    <div class="row align-items-center g-5">
+        <div class="col-lg-6">
+            <h1 class="display-4 fw-bold mb-4">Track Your Bank Transactions Smart Way</h1>
+            <p class="lead mb-4">Automatically parse your bank emails, track transactions, and manage your accounts all in one place.</p>
+            <div class="d-flex gap-3">
+                {% if not session.user_id %}
+                    <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg">
+                        <i class="bi bi-person-plus me-2"></i>Get Started
+                    </a>
+                    <a href="{{ url_for('login') }}" class="btn btn-outline-primary btn-lg">
+                        <i class="bi bi-box-arrow-in-right me-2"></i>Login
+                    </a>
+                {% else %}
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-lg">
+                        <i class="bi bi-speedometer2 me-2"></i>Go to Dashboard
+                    </a>
+                {% endif %}
             </div>
-            <div class="card-body">
-                <h5>How to use this tool:</h5>
-                <ol>
-                    <li>Choose one of the options above:
-                        <ul>
-                            <li><strong>Fetch Emails</strong>: Connect directly to your email account and fetch bank emails</li>
-                            <li><strong>Paste Email Content</strong>: Manually paste email content</li>
-                            <li><strong>Upload Email File</strong>: Upload a text file containing email content</li>
-                        </ul>
-                    </li>
-                    <li>The parser will extract transaction data from the email(s).</li>
-                    <li>You'll see the extracted data on the results page.</li>
-                    <li>Optionally, you can save the transaction(s) to the database for tracking.</li>
-                </ol>
-
-                <h5>Supported Banks:</h5>
-                <ul>
-                    <li>Bank Muscat</li>
-                </ul>
-
-                <h5>Supported Transaction Types:</h5>
-                <ul>
-                    <li>Income (money received)</li>
-                    <li>Expense (money spent)</li>
-                    <li>Transfer (money moved between accounts)</li>
-                </ul>
+        </div>
+        <div class="col-lg-6">
+            <div class="p-4 bg-primary bg-opacity-10 rounded-4">
+                <h2 class="h4 mb-4">Key Features</h2>
+                <div class="d-flex flex-column gap-3">
+                    <div class="d-flex align-items-center">
+                        <div class="feature-icon bg-primary bg-opacity-10 p-3 rounded-3 me-3">
+                            <i class="bi bi-envelope-paper text-primary fs-4"></i>
+                        </div>
+                        <div>
+                            <h3 class="h6 mb-1">Email Parsing</h3>
+                            <p class="mb-0 text-body-secondary">Automatically extract transaction data from bank emails</p>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="feature-icon bg-success bg-opacity-10 p-3 rounded-3 me-3">
+                            <i class="bi bi-graph-up text-success fs-4"></i>
+                        </div>
+                        <div>
+                            <h3 class="h6 mb-1">Transaction Tracking</h3>
+                            <p class="mb-0 text-body-secondary">Monitor your income, expenses, and transfers</p>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="feature-icon bg-info bg-opacity-10 p-3 rounded-3 me-3">
+                            <i class="bi bi-bank text-info fs-4"></i>
+                        </div>
+                        <div>
+                            <h3 class="h6 mb-1">Multi-Account Support</h3>
+                            <p class="mb-0 text-body-secondary">Manage multiple bank accounts in one place</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

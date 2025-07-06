@@ -1,130 +1,211 @@
 {% extends "base.html" %}
 
-{% block title %}Account Details - {{ account.account_number }} - Bank Email Parser{% endblock %}
+{% block title %}{{ account.bank_name }} Account - Money Tracker{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-12">
+<div class="row g-4">
+    <div class="col-12">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url_for('accounts') }}">Accounts</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('accounts') }}" class="text-decoration-none"><i class="bi bi-bank me-1"></i>Accounts</a></li>
                 <li class="breadcrumb-item active" aria-current="page">{{ account.account_number }}</li>
             </ol>
         </nav>
 
-        <div class="card mb-4">
-            <div class="card-header">
-                <h2>Account Details</h2>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <h3>{{ account.account_number }}</h3>
-                        <h5 class="text-muted">{{ account.bank_name }}</h5>
-                        <h4 class="mt-3">Balance: {{ "{:,.3f}".format(account.balance)  }} {{ account.currency }}</h4>
-                        <p class="text-muted">Last updated: {{ account.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+        <div class="card account-overview mb-4">
+            <div class="card-body p-4">
+                <div class="row g-4">
+                    <div class="col-md-8">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <span class="badge bg-primary-subtle text-primary mb-2">{{ account.bank_name }}</span>
+                                <h2 class="h3 mb-1">•••• {{ account.account_number[-4:] }}</h2>
+                                <p class="text-body-secondary mb-3">Last updated: {{ account.updated_at.strftime('%b %d, %Y at %H:%M') }}</p>
+
+                                <div class="balance-section">
+                                    <h3 class="h4 mb-0 d-flex align-items-center">
+                                        <span class="me-2">{{ "{:,.3f}".format(account.balance) }}</span>
+                                        <small class="text-body-secondary">{{ account.currency }}</small>
+                                    </h3>
+                                    <p class="text-body-secondary mb-0">Current Balance</p>
+                                </div>
+                            </div>
+
+                            <div class="action-buttons">
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#updateBalanceModal">
+                                        <i class="bi bi-wallet2 me-2"></i>Update Balance
+                                    </button>
+                                    <button type="button" class="btn btn-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
+                                        <span class="visually-hidden">Toggle Dropdown</span>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li>
+                                            <a class="dropdown-item" href="{{ url_for('edit_account', account_id=account.id) }}">
+                                                <i class="bi bi-pencil me-2"></i>Edit Account
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#deleteAccountModal">
+                                                <i class="bi bi-trash me-2"></i>Delete Account
+                                            </button>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="col-md-6">
-                        <h4>Transaction Summary</h4>
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Type</th>
-                                    <th>Count</th>
-                                    <th>Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td><span class="badge bg-success">Income</span></td>
-                                    <td>{{ summary.income_count }}</td>
-                                    <td>{{ summary.total_income }} {{ account.currency }}</td>
-                                </tr>
-                                <tr>
-                                    <td><span class="badge bg-danger">Expense</span></td>
-                                    <td>{{ summary.expense_count }}</td>
-                                    <td>{{ summary.total_expense }} {{ account.currency }}</td>
-                                </tr>
-                                <tr>
-                                    <td><span class="badge bg-info">Transfer</span></td>
-                                    <td>{{ summary.transfer_count }}</td>
-                                    <td>N/A</td>
-                                </tr>
-                            </tbody>
-                        </table>
+
+                    <div class="col-md-4">
+                        <div class="transaction-stats">
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <div class="p-3 rounded-3 bg-success-subtle">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <small class="text-success d-block">Total Income</small>
+                                                <strong class="text-success">{{ summary.total_income }} {{ account.currency }}</strong>
+                                            </div>
+                                            <div class="text-success">
+                                                <i class="bi bi-graph-up-arrow"></i>
+                                                <small class="d-block">{{ summary.income_count }}</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <div class="p-3 rounded-3 bg-danger-subtle">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <small class="text-danger d-block">Total Expenses</small>
+                                                <strong class="text-danger">{{ summary.total_expense }} {{ account.currency }}</strong>
+                                            </div>
+                                            <div class="text-danger">
+                                                <i class="bi bi-graph-down-arrow"></i>
+                                                <small class="d-block">{{ summary.expense_count }}</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="card">
-            <div class="card-header">
-                <h2>Transaction History</h2>
+            <div class="card-header bg-transparent p-4 border-bottom">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h3 class="h4 mb-0">Transaction History</h3>
+                    <div class="d-flex gap-2">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-outline-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="bi bi-funnel me-2"></i>Filter
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-arrow-up-circle me-2"></i>Income Only</a></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-arrow-down-circle me-2"></i>Expenses Only</a></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-arrow-left-right me-2"></i>Transfers Only</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-calendar3 me-2"></i>Last 30 Days</a></li>
+                            </ul>
+                        </div>
+                        <button type="button" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-download me-2"></i>Export
+                        </button>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 {% if transactions %}
                     <div class="table-responsive">
-                        <table class="table table-striped">
-                            <thead>
+                        <table class="table table-hover mb-0">
+                            <thead class="bg-light">
                                 <tr>
-                                    <th>Date</th>
+                                    <th class="px-4">Date</th>
                                     <th>Type</th>
                                     <th>Amount</th>
                                     <th>Description</th>
                                     <th>Sender/Receiver</th>
+                                    <th></th>
                                 </tr>
                             </thead>
-                             <tbody>
+                            <tbody>
                                 {% for transaction in transactions %}
-                                    <tr>
-                                        <td>
+                                    <tr class="transaction-row" {% if transaction.cleaned_email_content %}data-bs-toggle="tooltip" data-bs-placement="top" title="{{ transaction.cleaned_email_content|truncate(500) }}"{% endif %}>
+                                        <td class="px-4">
                                             {% if transaction.date_time %}
-                                                {{ transaction.date_time.strftime('%Y-%m-%d %H:%M') }}
+                                                <div class="d-flex align-items-center">
+                                                    <div class="transaction-date">
+                                                        <strong class="d-block">{{ transaction.date_time.strftime('%y/%b/%d') }}</strong>
+                                                        <small class="text-body-secondary">{{ transaction.date_time.strftime('%H:%M') }}</small>
+                                                    </div>
+                                                </div>
                                             {% else %}
                                                 N/A
                                             {% endif %}
                                         </td>
                                         <td>
                                             {% if transaction.transaction_type == 'INCOME' %}
-                                                <span class="badge bg-success">Income</span>
+                                                <span class="badge bg-success-subtle text-success px-3 py-2">
+                                                    <i class="bi bi-arrow-up-circle me-1"></i>Income
+                                                </span>
                                             {% elif transaction.transaction_type == 'EXPENSE' %}
-                                                <span class="badge bg-danger">Expense</span>
-                                            {% elif transaction.transaction_type == 'TRANSFER' %}
-                                                <span class="badge bg-info">Transfer</span>
+                                                <span class="badge bg-danger-subtle text-danger px-3 py-2">
+                                                    <i class="bi bi-arrow-down-circle me-1"></i>Expense
+                                                </span>
                                             {% else %}
-                                                <span class="badge bg-secondary">Unknown</span>
+                                                <span class="badge bg-info-subtle text-info px-3 py-2">
+                                                    <i class="bi bi-arrow-left-right me-1"></i>Transfer
+                                                </span>
                                             {% endif %}
                                         </td>
                                         <td>
-                                            {% if transaction.transaction_type == 'INCOME' %}
-                                                +{{ transaction.amount }} {{ transaction.currency }}
-                                            {% elif transaction.transaction_type == 'EXPENSE' %}
-                                                -{{ transaction.amount }} {{ transaction.currency }}
-                                            {% else %}
-                                                {{ transaction.amount }} {{ transaction.currency }}
-                                            {% endif %}
+                                            <span class="{{ 'text-success' if transaction.transaction_type == 'INCOME' else 'text-danger' if transaction.transaction_type == 'EXPENSE' else '' }}">
+                                                {% if transaction.transaction_type == 'INCOME' %}
+                                                    +{{ "{:,.3f}".format(transaction.amount) }} {{ transaction.currency }}
+                                                {% elif transaction.transaction_type == 'EXPENSE' %}
+                                                -{{ "{:,.3f}".format(transaction.amount) }} {{ transaction.currency }}
+                                                {% else %}
+                                                    {{ "{:,.3f}".format(transaction.amount) }} {{ transaction.currency }}
+                                                {% endif %}
+                                            </span>
                                         </td>
-                                        <td>{{ transaction.description or 'N/A' }}</td>
                                         <td>
-                                            {% if transaction.transaction_type == 'INCOME' %}
-                                                {{ transaction.from_party or 'Unknown' }}
-                                            {% elif transaction.transaction_type == 'EXPENSE' %}
-                                                {{ transaction.to_party or 'Unknown' }}
-                                            {% elif transaction.transaction_type == 'TRANSFER' %}
-                                                {% if transaction.from_party %}
-                                                    From: {{ transaction.from_party }}
-                                                {% endif %}
-                                                {% if transaction.to_party %}
-                                                    To: {{ transaction.to_party }}
-                                                {% endif %}
-                                            {% else %}
-                                                N/A
-                                            {% endif %}
+                                            <div class="text-truncate" style="max-width: 300px;">
+
+                                                {{ transaction.transaction_details or 'No description' }}
+                                            </div>
+                                        </td>
+                                        {% if transaction.transaction_type == 'INCOME' %}
+                                            <td class="text-success">{{ transaction.from_party or 'N/A' }}</td>
+                                        {% elif transaction.transaction_type == 'EXPENSE' %}
+                                            <td class="text-danger">{{ transaction.to_party or transaction.description or 'N/A' }}</td>
+                                        {% else %}
+                                            <td class="text-danger">{{ transaction.description or 'N/A' }}</td>
+                                        {% endif %}
+                                        <td class="text-end px-4">
+                                            <button class="btn btn-link btn-sm p-0" data-bs-toggle="dropdown">
+                                                <i class="bi bi-three-dots-vertical"></i>
+                                            </button>
+                                            <ul class="dropdown-menu">
+                                                <li>
+                                                    <a class="dropdown-item" href="{{ url_for('edit_transaction', transaction_id=transaction.id) }}">
+                                                        <i class="bi bi-pencil me-2"></i>Edit
+                                                    </a>
+                                                </li>
+                                                <li>
+                                                    <button class="dropdown-item text-danger">
+                                                        <i class="bi bi-trash me-2"></i>Delete
+                                                    </button>
+                                                </li>
+                                            </ul>
                                         </td>
                                     </tr>
                                 {% endfor %}
                             </tbody>
-
                         </table>
                     </div>
 
@@ -206,17 +287,151 @@
                 </div>
                 {% endif %}
                 {% else %}
-                    <div class="alert alert-info">
-                        <h4 class="alert-heading">No transactions found!</h4>
-                        <p>This account doesn't have any transactions yet. Parse some bank emails to add transactions.</p>
-                        <hr>
-                        <p class="mb-0">
-                            <a href="{{ url_for('index') }}" class="btn btn-primary">Parse Email</a>
-                        </p>
+                    <div class="text-center py-5">
+                        <div class="mb-4">
+                            <i class="bi bi-receipt display-1 text-muted"></i>
+                        </div>
+                        <h4>No Transactions Yet</h4>
+                        <p class="text-body-secondary mb-4">Start by processing your bank emails or adding transactions manually.</p>
+                        <div class="d-flex justify-content-center gap-2">
+                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTransactionModal">
+                                <i class="bi bi-plus-circle me-2"></i>Add Transaction
+                            </button>
+                            <a href="{{ url_for('index') }}" class="btn btn-outline-primary">
+                                <i class="bi bi-envelope me-2"></i>Process Emails
+                            </a>
+                        </div>
                     </div>
                 {% endif %}
             </div>
         </div>
     </div>
 </div>
+
+<!-- Update Balance Modal -->
+<div class="modal fade" id="updateBalanceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header border-0">
+                <h5 class="modal-title">Update Balance</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="post" action="{{ url_for('update_balance', account_id=account.id) }}" id="updateBalanceForm" class="needs-validation" novalidate>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="new_balance" class="form-label">New Balance</label>
+                        <div class="input-group">
+                            <span class="input-group-text">{{ account.currency }}</span>
+                            <input type="number"
+                                   class="form-control form-control-lg"
+                                   id="new_balance"
+                                   name="new_balance"
+                                   value="{{ '{:.3f}'.format(account.balance) }}"
+                                   step="0.001"
+                                   required>
+                        </div>
+                        <div class="invalid-feedback">Please provide a valid balance amount.</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" form="updateBalanceForm" class="btn btn-primary">
+                    <i class="bi bi-check2 me-2"></i>Update Balance
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Account Modal -->
+<div class="modal fade" id="deleteAccountModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header border-0">
+                <h5 class="modal-title text-danger">Delete Account</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this account? This action cannot be undone.</p>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    All transactions associated with this account will also be deleted.
+                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger">Delete Account</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .account-overview {
+        background: linear-gradient(135deg, var(--bs-primary-bg-subtle) 0%, var(--bs-secondary-bg-subtle) 100%);
+    }
+
+    .transaction-row {
+        transition: background-color 0.2s ease;
+    }
+
+    .transaction-row:hover {
+        background-color: var(--bs-secondary-bg-subtle);
+    }
+
+    .transaction-date {
+        line-height: 1.2;
+    }
+
+    .badge {
+        font-weight: 500;
+    }
+
+    .dropdown-item {
+        padding: 0.5rem 1rem;
+    }
+
+    .table > :not(caption) > * > * {
+        padding: 1rem 0.75rem;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Initialize tooltips
+    const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+    tooltips.forEach(tooltip => new bootstrap.Tooltip(tooltip))
+
+    // Form validation
+    const forms = document.querySelectorAll('.needs-validation')
+    Array.from(forms).forEach(form => {
+        form.addEventListener('submit', event => {
+            if (!form.checkValidity()) {
+                event.preventDefault()
+                event.stopPropagation()
+            }
+            form.classList.add('was-validated')
+
+            // If form is valid and it's the balance update form, show loading state
+            if (form.checkValidity() && form.id === 'updateBalanceForm') {
+                const submitBtn = form.querySelector('button[type="submit"]')
+                submitBtn.disabled = true
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Updating...'
+            }
+        }, false)
+    })
+
+    // Auto-focus balance input when modal opens
+    const updateBalanceModal = document.getElementById('updateBalanceModal')
+    if (updateBalanceModal) {
+        updateBalanceModal.addEventListener('shown.bs.modal', function () {
+            document.getElementById('new_balance').focus()
+        })
+    }
+</script>
 {% endblock %}

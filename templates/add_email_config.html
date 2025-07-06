@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}Add Email Configuration - Money Tracker{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <nav aria-label="breadcrumb" class="mb-4">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('email_configs') }}" class="text-decoration-none">Email Configurations</a></li>
+                    <li class="breadcrumb-item active">Add Configuration</li>
+                </ol>
+            </nav>
+
+            <div class="card">
+                <div class="card-header bg-transparent p-4 border-bottom">
+                    <h2 class="h4 mb-0">Add Email Configuration</h2>
+                </div>
+                <div class="card-body p-4">
+                    <form method="post" class="needs-validation" novalidate>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <div class="row g-4">
+                            <div class="col-12">
+                                <div class="form-group">
+                                    <label for="name" class="form-label">Configuration Name</label>
+                                    <input type="text"
+                                           class="form-control form-control-lg"
+                                           id="name"
+                                           name="name"
+                                           placeholder="e.g., Gmail, Outlook"
+                                           required>
+                                    <div class="invalid-feedback">Please provide a name for this configuration.</div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="email_host" class="form-label">Email Host</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-hdd-network"></i></span>
+                                        <input type="text"
+                                               class="form-control form-control-lg"
+                                               id="email_host"
+                                               name="email_host"
+                                               placeholder="e.g., imap.gmail.com"
+                                               required>
+                                    </div>
+                                    <div class="invalid-feedback">Please provide the email host.</div>
+                                    <div class="form-text">Common hosts:
+                                        <a href="#" class="quick-host" data-host="imap.gmail.com" data-port="993">Gmail</a>,
+                                        <a href="#" class="quick-host" data-host="outlook.office365.com" data-port="993">Outlook</a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="email_port" class="form-label">Port</label>
+                                    <input type="number"
+                                           class="form-control form-control-lg"
+                                           id="email_port"
+                                           name="email_port"
+                                           value="993"
+                                           required>
+                                    <div class="invalid-feedback">Please provide the port number.</div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label for="email_username" class="form-label">Email Address</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                        <input type="email"
+                                               class="form-control form-control-lg"
+                                               id="email_username"
+                                               name="email_username"
+                                               placeholder="your.email@example.com"
+                                               required>
+                                    </div>
+                                    <div class="invalid-feedback">Please provide a valid email address.</div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label for="email_password" class="form-label">Password or App Password</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-key"></i></span>
+                                        <input type="password"
+                                               class="form-control form-control-lg"
+                                               id="email_password"
+                                               name="email_password"
+                                               required>
+                                        <button class="btn btn-outline-secondary"
+                                                type="button"
+                                                id="togglePassword">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </div>
+                                    <div class="invalid-feedback">Please provide your password.</div>
+                                    <div class="form-text">
+                                        For enhanced security, we recommend using an
+                                        <a href="https://support.google.com/accounts/answer/185833" target="_blank">app password</a>
+                                        instead of your main account password.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                <div class="form-check form-switch">
+                                    <input type="checkbox"
+                                           class="form-check-input"
+                                           id="email_use_ssl"
+                                           name="email_use_ssl"
+                                           checked>
+                                    <label class="form-check-label" for="email_use_ssl">Use SSL/TLS</label>
+                                </div>
+                                <div class="form-text">Recommended for secure connections.</div>
+                            </div>
+
+                            <div class="col-12">
+                                <hr class="my-4">
+                                <h3 class="h5 mb-3">Email Filtering</h3>
+                            </div>
+
+                            <div class="col-12">
+                                <div class="form-group">
+                                    <label for="bank_email_addresses" class="form-label">Bank Email Addresses</label>
+                                    <textarea class="form-control"
+                                              id="bank_email_addresses"
+                                              name="bank_email_addresses"
+                                              rows="2"
+                                              placeholder="Enter email addresses, separated by commas"></textarea>
+                                    <div class="form-text">Enter the email addresses that send bank transaction notifications, separated by commas.</div>
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                <div class="form-group">
+                                    <label for="bank_email_subjects" class="form-label">Subject Keywords</label>
+                                    <textarea class="form-control"
+                                              id="bank_email_subjects"
+                                              name="bank_email_subjects"
+                                              rows="2"
+                                              placeholder="Enter keywords, separated by commas"></textarea>
+                                    <div class="form-text">Enter keywords that appear in bank transaction email subjects, separated by commas.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 d-flex justify-content-between align-items-center">
+                            <a href="{{ url_for('email_configs') }}" class="btn btn-outline-primary">
+                                <i class="bi bi-arrow-left me-2"></i>Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check2 me-2"></i>Add Configuration
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Form validation
+    const forms = document.querySelectorAll('.needs-validation')
+    Array.from(forms).forEach(form => {
+        form.addEventListener('submit', event => {
+            if (!form.checkValidity()) {
+                event.preventDefault()
+                event.stopPropagation()
+            }
+            form.classList.add('was-validated')
+        }, false)
+    })
+
+    // Password toggle
+    const togglePassword = document.getElementById('togglePassword')
+    const password = document.getElementById('email_password')
+
+    togglePassword.addEventListener('click', function() {
+        const type = password.getAttribute('type') === 'password' ? 'text' : 'password'
+        password.setAttribute('type', type)
+        this.querySelector('i').className = `bi bi-eye${type === 'password' ? '' : '-slash'}`
+    })
+
+    // Quick host selection
+    document.querySelectorAll('.quick-host').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault()
+            document.getElementById('email_host').value = this.dataset.host
+            document.getElementById('email_port').value = this.dataset.port
+        })
+    })
+})
+</script>
+{% endblock %}

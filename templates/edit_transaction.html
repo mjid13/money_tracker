@@ -1,108 +1,202 @@
 {% extends "base.html" %}
 
-{% block title %}Edit Transaction - Bank Email Parser{% endblock %}
+{% block title %}Edit Transaction - Money Tracker{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-12">
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
-                <li class="breadcrumb-item"><a href="{{ url_for('accounts') }}">Accounts</a></li>
-                <li class="breadcrumb-item"><a href="{{ url_for('account_details', account_number=transaction.account.account_number) }}">{{ transaction.account.account_number }}</a></li>
-                <li class="breadcrumb-item active" aria-current="page">Edit Transaction</li>
-            </ol>
-        </nav>
-    </div>
-</div>
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <nav aria-label="breadcrumb" class="mb-4">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('accounts') }}" class="text-decoration-none">Accounts</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('account_details', account_number=transaction.account.account_number) }}" class="text-decoration-none">{{ transaction.account.account_number }}</a></li>
+                    <li class="breadcrumb-item active">Edit Transaction</li>
+                </ol>
+            </nav>
 
-<div class="row">
-    <div class="col-md-8 offset-md-2">
-        <div class="card">
-            <div class="card-header">
-                <h3>Edit Transaction</h3>
-            </div>
-            <div class="card-body">
-                <form method="post">
-                    <div class="mb-3">
-                        <label for="transaction_type" class="form-label">Transaction Type *</label>
-                        <select class="form-select" id="transaction_type" name="transaction_type" required>
-                            <option value="income">Income</option>
-                            <option value="expense">Expense</option>
-                            <option value="transfer">Transfer</option>
-                            <option value="unknown">Unknown</option>
-                        </select>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="amount" class="form-label">Amount *</label>
-                        <input type="number" class="form-control" id="amount" name="amount" step="0.01" value="{{ transaction.amount }}" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="date_time" class="form-label">Date & Time *</label>
-                        <input type="datetime-local" class="form-control" id="date_time" name="date_time" value="{{ transaction.date_time.strftime('%Y-%m-%dT%H:%M') }}" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="description" class="form-label">Description</label>
-                        <textarea class="form-control" id="description" name="description" rows="3">{{ transaction.description }}</textarea>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="transaction_details" class="form-label">Transaction Details</label>
-                        <input type="text" class="form-control" id="transaction_details" name="transaction_details" value="{{ transaction.transaction_details }}">
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Account</label>
-                        <input type="text" class="form-control" value="{{ transaction.account.bank_name }} - {{ transaction.account.account_number }}" readonly>
-                    </div>
-                    
-                    {% if transaction.email_metadata %}
-                    <div class="mb-3">
-                        <label class="form-label">Source Email</label>
-                        <div class="card">
-                            <div class="card-body">
-                                <p><strong>From:</strong> {{ transaction.email_metadata.sender }}</p>
-                                <p><strong>Subject:</strong> {{ transaction.email_metadata.subject }}</p>
-                                <p><strong>Date:</strong> {{ transaction.email_metadata.date }}</p>
+            <div class="card">
+                <div class="card-header bg-transparent p-4 border-bottom">
+                    <h2 class="h4 mb-0">Edit Transaction</h2>
+                </div>
+                <div class="card-body p-4">
+                    <form method="post" class="needs-validation" novalidate>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <div class="row g-4">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="amount" class="form-label">Amount</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">{{ transaction.account.currency }}</span>
+                                        <input type="number"
+                                               class="form-control form-control-lg"
+                                               id="amount"
+                                               name="amount"
+                                               value="{{ "{:.3f}".format(transaction.amount) }}"
+                                               step="0.001"
+                                               required>
+                                    </div>
+                                    <div class="invalid-feedback">Please enter a valid amount.</div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="transaction_type" class="form-label">Type</label>
+                                    <select class="form-select form-select-lg" id="transaction_type" name="transaction_type" required>
+                                        <option value="INCOME" {{ 'selected' if transaction.transaction_type == 'INCOME' }}>Income</option>
+                                        <option value="EXPENSE" {{ 'selected' if transaction.transaction_type == 'EXPENSE' }}>Expense</option>
+                                        <option value="TRANSFER" {{ 'selected' if transaction.transaction_type == 'TRANSFER' }}>Transfer</option>
+                                    </select>
+                                    <div class="invalid-feedback">Please select a transaction type.</div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label for="date_time" class="form-label">Date & Time</label>
+                                    <input type="datetime-local"
+                                           class="form-control form-control-lg"
+                                           id="date_time"
+                                           name="date_time"
+                                           value="{{ transaction.date_time.strftime('%Y-%m-%dT%H:%M') }}"
+                                           required>
+                                    <div class="invalid-feedback">Please select a valid date and time.</div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label for="description" class="form-label">Description</label>
+                                    <textarea class="form-control"
+                                              id="description"
+                                              name="description"
+                                              rows="3">{{ transaction.description or '' }}</textarea>
+                                </div>
+                            </div>
+
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label for="transaction_details" class="form-label">Additional Details</label>
+                                    <textarea class="form-control font-monospace"
+                                              id="transaction_details"
+                                              name="transaction_details"
+                                              rows="4">{{ transaction.transaction_details or '' }}</textarea>
+                                    <div class="form-text">Additional transaction details or notes.</div>
+                                </div>
+                            </div>
+
+                            {% if transaction.email_metadata %}
+                            <div class="col-12">
+                                <div class="alert alert-info d-flex align-items-center">
+                                    <i class="bi bi-info-circle-fill me-2"></i>
+                                    <div>
+                                        This transaction was created from an email on {{ transaction.email_metadata.date }}.
+                                        <button type="button" class="btn btn-link p-0 ms-2" data-bs-toggle="collapse" data-bs-target="#emailDetails">
+                                            View details
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="collapse" id="emailDetails">
+                                    <div class="card card-body bg-light">
+                                        <div class="mb-2">
+                                            <strong>From:</strong> {{ transaction.email_metadata.from }}
+                                        </div>
+                                        <div class="mb-2">
+                                            <strong>Subject:</strong> {{ transaction.email_metadata.subject }}
+                                        </div>
+                                        {% if transaction.cleaned_email_content %}
+                                        <div>
+                                            <strong>Content:</strong>
+                                            <pre class="mt-2 mb-0"><code>{{ transaction.cleaned_email_content }}</code></pre>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mt-4 d-flex justify-content-between align-items-center">
+                            <button type="button"
+                                    class="btn btn-danger"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#deleteModal">
+                                <i class="bi bi-trash me-2"></i>Delete Transaction
+                            </button>
+                            <div class="d-flex gap-2">
+                                <a href="{{ url_for('account_details', account_number=transaction.account.account_number) }}"
+                                   class="btn btn-outline-primary">
+                                    Cancel
+                                </a>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-check2 me-2"></i>Save Changes
+                                </button>
                             </div>
                         </div>
-                    </div>
-                    {% endif %}
-                    
-                    <div class="d-flex justify-content-between">
-                        <a href="{{ url_for('account_details', account_number=transaction.account.account_number) }}" class="btn btn-secondary">Cancel</a>
-                        <div>
-                            <button type="submit" class="btn btn-primary">Save Changes</button>
-                            <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteTransactionModal">Delete Transaction</button>
-                        </div>
-                    </div>
-                </form>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Delete Transaction Modal -->
-<div class="modal fade" id="deleteTransactionModal" tabindex="-1" aria-labelledby="deleteTransactionModalLabel" aria-hidden="true">
+<!-- Delete Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="deleteTransactionModalLabel">Confirm Delete</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="modal-header border-0">
+                <h5 class="modal-title text-danger">Delete Transaction</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <p>Are you sure you want to delete this transaction? This action cannot be undone.</p>
+                <div class="alert alert-warning d-flex align-items-center">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    This will permanently remove the transaction from your account history.
+                </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <form action="{{ url_for('delete_transaction', transaction_id=transaction.id) }}" method="post">
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                <form action="{{ url_for('delete_transaction', transaction_id=transaction.id) }}" method="post" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-danger">Delete Transaction</button>
                 </form>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Form validation
+(function () {
+    'use strict'
+    const forms = document.querySelectorAll('.needs-validation')
+    Array.from(forms).forEach(form => {
+        form.addEventListener('submit', event => {
+            if (!form.checkValidity()) {
+                event.preventDefault()
+                event.stopPropagation()
+            }
+            form.classList.add('was-validated')
+        }, false)
+    })
+})()
+
+// Update amount color based on transaction type
+document.getElementById('transaction_type').addEventListener('change', function() {
+    const amountInput = document.getElementById('amount')
+    amountInput.classList.remove('text-success', 'text-danger')
+    if (this.value === 'INCOME') {
+        amountInput.classList.add('text-success')
+    } else if (this.value === 'EXPENSE') {
+        amountInput.classList.add('text-danger')
+    }
+})
+
+// Trigger initial color
+document.getElementById('transaction_type').dispatchEvent(new Event('change'))
+</script>
 {% endblock %}

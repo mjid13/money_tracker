@@ -49,6 +49,7 @@ class EmailConfiguration(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    name = Column(String(100), nullable=False, default="Default")  # Name to identify this configuration
     email_host = Column(String(100), nullable=False)
     email_port = Column(Integer, nullable=False)
     email_username = Column(String(100), nullable=False)
@@ -59,8 +60,9 @@ class EmailConfiguration(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationship
+    # Relationships
     user = relationship("User", back_populates="email_configs")
+    accounts = relationship("Account", back_populates="email_config")
 
 class Account(Base):
     """Account model representing a bank account."""
@@ -68,6 +70,7 @@ class Account(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    email_config_id = Column(Integer, ForeignKey('email_configurations.id'), nullable=True)
     account_number = Column(String(50), nullable=False)
     bank_name = Column(String(100), nullable=False)
     account_holder = Column(String(100))
@@ -78,9 +81,11 @@ class Account(Base):
 
     # Relationships
     user = relationship("User", back_populates="accounts")
+    email_config = relationship("EmailConfiguration", back_populates="accounts")
     transactions = relationship("Transaction", back_populates="account")
 
-    # Composite unique constraint for user_id and account_number
+    # Composite unique constraint for user_id, email_config_id, and account_number
+    # This ensures an account number can only be in one email configuration
     __table_args__ = (
         UniqueConstraint('user_id', 'account_number', name='_user_account_uc'),
     )
@@ -115,7 +120,7 @@ class Transaction(Base):
     transaction_type = Column(Enum(TransactionType), nullable=False)
     amount = Column(Float, nullable=False)
     currency = Column(String(10), default='OMR')
-    date_time = Column(DateTime, nullable=False)
+    date_time = Column(DateTime, nullable=True)
     description = Column(Text)
     transaction_id = Column(String(100))  # Bank's transaction reference
 
@@ -139,6 +144,9 @@ class Transaction(Base):
     # Email tracking (deprecated, use email_metadata relationship instead)
     email_id = Column(String(100))
     email_date = Column(String(200))
+
+    # Cleaned email content for hover display
+    cleaned_email_content = Column(Text)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -275,7 +283,8 @@ class TransactionRepository:
                 bank_name=account_data.get('bank_name', 'Unknown'),
                 account_holder=account_data.get('account_holder'),
                 balance=account_data.get('balance', 0.0),
-                currency=account_data.get('currency', 'OMR')
+                currency=account_data.get('currency', 'OMR'),
+                email_config_id=account_data.get('email_config_id')
             )
 
             session.add(account)
@@ -419,7 +428,8 @@ class TransactionRepository:
                 transaction_details=transaction_data.get('transaction_details'),
                 country=transaction_data.get('country'),
                 email_id=transaction_data.get('email_id'),
-                email_date=transaction_data.get('email_date')
+                email_date=transaction_data.get('email_date'),
+                cleaned_email_content=transaction_data.get('cleaned_email_content')
             )
 
             session.add(transaction)

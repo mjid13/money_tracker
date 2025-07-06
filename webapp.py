@@ -7,10 +7,17 @@ process it using the existing parsing logic, and display the extracted transacti
 
 import os
 import logging
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+import threading
+import time
+import uuid
+import json
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from werkzeug.utils import secure_filename
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
+import random
+import string
+from threading import Lock
 
 from money_tracker.services.parser_service import TransactionParser
 from money_tracker.services.email_service import EmailService
@@ -41,6 +48,166 @@ db = Database()
 db.connect()
 db.create_tables()
 
+# Task manager for tracking email fetching tasks
+email_tasks = {}
+email_tasks_lock = Lock()
+
+def process_emails_task(task_id, user_id, account_number, folder, unread_only, save_to_db):
+    """Background task for processing emails."""
+    db_session = db.get_session()
+    try:
+        # Update task status
+        with email_tasks_lock:
+            email_tasks[task_id]['status'] = 'processing'
+            email_tasks[task_id]['progress'] = 0
+            email_tasks[task_id]['start_time'] = time.time()
+
+        # Get the account to find its associated email configuration
+        account = db_session.query(Account).filter(
+            Account.user_id == user_id,
+            Account.account_number == account_number
+        ).first()
+
+        if not account:
+            with email_tasks_lock:
+                email_tasks[task_id]['status'] = 'error'
+                email_tasks[task_id]['message'] = 'Account not found'
+            return
+
+        # Check if the account has an associated email configuration
+        if not account.email_config_id:
+            with email_tasks_lock:
+                email_tasks[task_id]['status'] = 'error'
+                email_tasks[task_id]['message'] = 'This account does not have an associated email configuration'
+            return
+
+        # Get the email configuration for this account
+        email_config = db_session.query(EmailConfiguration).filter(
+            EmailConfiguration.id == account.email_config_id
+        ).first()
+
+        if not email_config:
+            with email_tasks_lock:
+                email_tasks[task_id]['status'] = 'error'
+                email_tasks[task_id]['message'] = 'Email configuration not found'
+            return
+
+        # Create email service from the account's email configuration
+        email_service = EmailService(
+            host=email_config.email_host,
+            port=email_config.email_port,
+            username=email_config.email_username,
+            password=email_config.email_password,
+            use_ssl=email_config.email_use_ssl,
+            bank_email_addresses=email_config.bank_email_addresses.split(',') if email_config.bank_email_addresses else [],
+            bank_email_subjects=email_config.bank_email_subjects.split(',') if email_config.bank_email_subjects else []
+        )
+
+        # Connect to email
+        if not email_service.connect():
+            with email_tasks_lock:
+                email_tasks[task_id]['status'] = 'error'
+                email_tasks[task_id]['message'] = 'Failed to connect to email server'
+            return
+
+        # Get bank emails
+        emails = email_service.get_bank_emails(folder=folder, unread_only=unread_only)
+
+        if not emails:
+            with email_tasks_lock:
+                email_tasks[task_id]['status'] = 'completed'
+                email_tasks[task_id]['message'] = 'No bank emails found'
+                email_tasks[task_id]['progress'] = 100
+                email_tasks[task_id]['end_time'] = time.time()
+            return
+
+        # Parse each email and store results
+        parsed_emails = []
+        saved_count = 0
+        total_emails = len(emails)
+
+        for i, email_data in enumerate(emails):
+            # Update progress
+            progress = int((i / total_emails) * 100)
+
+            # Calculate estimated time remaining
+            if i > 0:
+                with email_tasks_lock:
+                    email_tasks[task_id]['progress'] = progress
+                    elapsed_time = time.time() - email_tasks[task_id]['start_time']
+                    emails_per_second = i / elapsed_time
+                    remaining_emails = total_emails - i
+                    estimated_seconds = remaining_emails / emails_per_second if emails_per_second > 0 else 0
+                    email_tasks[task_id]['estimated_seconds'] = estimated_seconds
+            else:
+                with email_tasks_lock:
+                    email_tasks[task_id]['progress'] = progress
+
+            # Save email metadata
+            email_metadata = TransactionRepository.create_email_metadata(db_session, {
+                'user_id': user_id,
+                'id': email_data.get('id'),
+                'subject': email_data.get('subject', ''),
+                'from': email_data.get('from', ''),
+                'date': email_data.get('date', ''),
+                'body': email_data.get('body', ''),
+                'processed': True
+            })
+
+            # Parse email to extract transaction data
+            transaction_data = parser.parse_email(email_data)
+
+            if transaction_data:
+                # Check if the account is different
+                if account_number[-4:] not in transaction_data.get('account_number'):
+                    continue
+
+                # Add user_id, account_number, and email_metadata_id to transaction data
+                transaction_data['user_id'] = user_id
+                transaction_data['account_number'] = account_number
+
+                if email_metadata:
+                    transaction_data['email_metadata_id'] = email_metadata.id
+
+                # Store cleaned email content for hover display
+                transaction_data['cleaned_email_content'] = email_data.get('body', '')
+
+                parsed_emails.append({
+                    'email': email_data,
+                    'transaction': transaction_data
+                })
+
+                # Save to database if requested
+                if save_to_db:
+                    transaction = TransactionRepository.create_transaction(
+                        db_session, transaction_data
+                    )
+                    if transaction:
+                        saved_count += 1
+
+        # Disconnect from email
+        email_service.disconnect()
+
+        # Update task status
+        with email_tasks_lock:
+            email_tasks[task_id]['status'] = 'completed'
+            email_tasks[task_id]['progress'] = 100
+            email_tasks[task_id]['end_time'] = time.time()
+            email_tasks[task_id]['parsed_count'] = len(parsed_emails)
+            email_tasks[task_id]['saved_count'] = saved_count
+
+            # Store the first transaction in session for display
+            if parsed_emails:
+                email_tasks[task_id]['first_transaction'] = parsed_emails[0]['transaction']
+
+    except Exception as e:
+        logger.error(f"Error in background task: {str(e)}")
+        with email_tasks_lock:
+            email_tasks[task_id]['status'] = 'error'
+            email_tasks[task_id]['message'] = str(e)
+    finally:
+        db.close_session(db_session)
+
 # Login required decorator
 def login_required(f):
     @wraps(f)
@@ -53,10 +220,8 @@ def login_required(f):
 
 @app.route('/')
 def index():
-    """Home page with options to input email data."""
-    if 'user_id' in session:
-        return redirect(url_for('dashboard'))
-    return render_template('index.html')
+    """Home page with landing content."""
+    return render_template('index.html', year=datetime.now().year)
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -103,7 +268,7 @@ def register():
 
         except Exception as e:
             logger.error(f"Error registering user: {str(e)}")
-            flash(f'Error registering user: {str(e)}', 'error')
+            flash('Error registering user. Please try again.', 'error')
             return render_template('register.html')
         finally:
             db.close_session(db_session)
@@ -138,7 +303,7 @@ def login():
 
         except Exception as e:
             logger.error(f"Error logging in: {str(e)}")
-            flash(f'Error logging in: {str(e)}', 'error')
+            flash('Error logging in. Please try again.', 'error')
             return render_template('login.html')
         finally:
             db.close_session(db_session)
@@ -163,17 +328,17 @@ def dashboard():
         # Get user's accounts
         accounts = TransactionRepository.get_user_accounts(db_session, user_id)
 
-        # Get user's email configuration
-        email_config = db_session.query(EmailConfiguration).filter(
+        # Get user's email configurations
+        email_configs = db_session.query(EmailConfiguration).filter(
             EmailConfiguration.user_id == user_id
-        ).first()
+        ).all()
 
         return render_template('dashboard.html', 
                               accounts=accounts, 
-                              email_config=email_config)
+                              email_configs=email_configs)
     except Exception as e:
         logger.error(f"Error loading dashboard: {str(e)}")
-        flash(f'Error loading dashboard: {str(e)}', 'error')
+        flash('Error loading dashboard. Please try again.', 'error')
         return redirect(url_for('index'))
     finally:
         db.close_session(db_session)
@@ -194,7 +359,7 @@ def profile():
         return render_template('profile.html', user=user)
     except Exception as e:
         logger.error(f"Error loading profile: {str(e)}")
-        flash(f'Error loading profile: {str(e)}', 'error')
+        flash('Error loading profile. Please try again.', 'error')
         return redirect(url_for('dashboard'))
     finally:
         db.close_session(db_session)
@@ -203,29 +368,51 @@ def profile():
 @login_required
 def add_account():
     """Add a new bank account."""
-    if request.method == 'POST':
-        user_id = session.get('user_id')
-        account_number = request.form.get('account_number')
-        bank_name = request.form.get('bank_name')
-        account_holder = request.form.get('account_holder')
-        balance = request.form.get('balance', 0.0)
-        currency = request.form.get('currency', 'OMR')
+    user_id = session.get('user_id')
+    db_session = db.get_session()
 
-        if not account_number or not bank_name:
-            flash('Account number and bank name are required', 'error')
-            return render_template('add_account.html')
+    try:
+        # Get all email configurations for this user
+        email_configs = db_session.query(EmailConfiguration).filter(
+            EmailConfiguration.user_id == user_id
+        ).all()
 
-        db_session = db.get_session()
-        try:
+        if request.method == 'POST':
+            account_number = request.form.get('account_number')
+            bank_name = request.form.get('bank_name')
+            account_holder = request.form.get('account_holder')
+            balance = request.form.get('balance', 0.0)
+            currency = request.form.get('currency', 'OMR')
+            email_config_id = request.form.get('email_config_id')
+
+            if not account_number or not bank_name:
+                flash('Account number and bank name are required', 'error')
+                return render_template('add_account.html', email_configs=email_configs)
+
+            # Validate balance
+            try:
+                balance_float = float(balance) if balance else 0.0
+            except ValueError:
+                flash('Balance must be a valid number', 'error')
+                return render_template('add_account.html', email_configs=email_configs)
+
             # Create account data
             account_data = {
                 'user_id': user_id,
                 'account_number': account_number,
                 'bank_name': bank_name,
                 'account_holder': account_holder,
-                'balance': float(balance) if balance else 0.0,
+                'balance': balance_float,
                 'currency': currency
             }
+
+            # Add email_config_id if provided
+            if email_config_id:
+                try:
+                    account_data['email_config_id'] = int(email_config_id)
+                except ValueError:
+                    flash('Invalid email configuration selected', 'error')
+                    return render_template('add_account.html', email_configs=email_configs)
 
             account = TransactionRepository.create_account(db_session, account_data)
             if account:
@@ -233,16 +420,15 @@ def add_account():
                 return redirect(url_for('dashboard'))
             else:
                 flash('Error adding account', 'error')
-                return render_template('add_account.html')
+                return render_template('add_account.html', email_configs=email_configs)
 
-        except Exception as e:
-            logger.error(f"Error adding account: {str(e)}")
-            flash(f'Error adding account: {str(e)}', 'error')
-            return render_template('add_account.html')
-        finally:
-            db.close_session(db_session)
-
-    return render_template('add_account.html')
+        return render_template('add_account.html', email_configs=email_configs)
+    except Exception as e:
+        logger.error(f"Error adding account: {str(e)}")
+        flash('Error adding account. Please try again.', 'error')
+        return render_template('add_account.html', email_configs=[])
+    finally:
+        db.close_session(db_session)
 
 @app.route('/accounts/<int:account_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -261,6 +447,11 @@ def edit_account(account_id):
             flash('Account not found or you do not have permission to edit it', 'error')
             return redirect(url_for('dashboard'))
 
+        # Get all email configurations for this user
+        email_configs = db_session.query(EmailConfiguration).filter(
+            EmailConfiguration.user_id == user_id
+        ).all()
+
         if request.method == 'POST':
             account.account_number = request.form.get('account_number')
             account.bank_name = request.form.get('bank_name')
@@ -268,14 +459,61 @@ def edit_account(account_id):
             account.balance = float(request.form.get('balance', 0.0))
             account.currency = request.form.get('currency', 'OMR')
 
+            # Update email_config_id
+            email_config_id = request.form.get('email_config_id')
+            if email_config_id:
+                account.email_config_id = int(email_config_id)
+            else:
+                account.email_config_id = None
+
             db_session.commit()
             flash('Account updated successfully', 'success')
             return redirect(url_for('dashboard'))
 
-        return render_template('edit_account.html', account=account)
+        return render_template('edit_account.html', account=account, email_configs=email_configs)
     except Exception as e:
         logger.error(f"Error editing account: {str(e)}")
         flash(f'Error editing account: {str(e)}', 'error')
+        return redirect(url_for('dashboard'))
+    finally:
+        db.close_session(db_session)
+
+@app.route('/accounts/<int:account_id>/update-balance', methods=['POST'])
+@login_required
+def update_balance(account_id):
+    """Update account balance."""
+    user_id = session.get('user_id')
+    db_session = db.get_session()
+
+    try:
+        account = db_session.query(Account).filter(
+            Account.id == account_id,
+            Account.user_id == user_id
+        ).first()
+
+        if not account:
+            flash('Account not found or you do not have permission to update it', 'error')
+            return redirect(url_for('dashboard'))
+
+        new_balance = request.form.get('new_balance')
+        if not new_balance:
+            flash('No balance value provided', 'error')
+            return redirect(url_for('account_details', account_number=account.account_number))
+
+        try:
+            new_balance = float(new_balance)
+            account.balance = new_balance
+            account.updated_at = datetime.now()  # Update the timestamp
+            db_session.commit()
+            flash('Balance updated successfully', 'success')
+        except ValueError:
+            flash('Invalid balance value provided', 'error')
+
+        # Important: Redirect to the account details page using account_number
+        return redirect(url_for('account_details', account_number=account.account_number))
+    except Exception as e:
+        logger.error(f"Error updating balance: {str(e)}")
+        flash(f'Error updating balance: {str(e)}', 'error')
         return redirect(url_for('dashboard'))
     finally:
         db.close_session(db_session)
@@ -317,22 +555,39 @@ def delete_account(account_id):
     finally:
         db.close_session(db_session)
 
-@app.route('/email-config', methods=['GET', 'POST'])
+@app.route('/email-configs', methods=['GET'])
 @login_required
-def email_config():
-    """Manage email configuration."""
+def email_configs():
+    """List all email configurations."""
     user_id = session.get('user_id')
     db_session = db.get_session()
 
     try:
-        # Get existing email configuration
-        email_config = db_session.query(EmailConfiguration).filter(
+        # Get all email configurations for this user
+        email_configs = db_session.query(EmailConfiguration).filter(
             EmailConfiguration.user_id == user_id
-        ).first()
+        ).all()
 
+        return render_template('email_configs.html', email_configs=email_configs)
+    except Exception as e:
+        logger.error(f"Error listing email configurations: {str(e)}")
+        flash(f'Error listing email configurations: {str(e)}', 'error')
+        return redirect(url_for('dashboard'))
+    finally:
+        db.close_session(db_session)
+
+@app.route('/email-config/add', methods=['GET', 'POST'])
+@login_required
+def add_email_config():
+    """Add a new email configuration."""
+    user_id = session.get('user_id')
+    db_session = db.get_session()
+
+    try:
         if request.method == 'POST':
             config_data = {
                 'user_id': user_id,
+                'name': request.form.get('name', 'Default'),
                 'email_host': request.form.get('email_host'),
                 'email_port': int(request.form.get('email_port')),
                 'email_username': request.form.get('email_username'),
@@ -344,16 +599,99 @@ def email_config():
 
             result = TransactionRepository.create_email_config(db_session, config_data)
             if result:
-                flash('Email configuration saved successfully', 'success')
-                return redirect(url_for('dashboard'))
+                flash('Email configuration added successfully', 'success')
+                return redirect(url_for('email_configs'))
             else:
-                flash('Error saving email configuration', 'error')
+                flash('Error adding email configuration', 'error')
 
-        return render_template('email_config.html', email_config=email_config)
+        return render_template('add_email_config.html')
     except Exception as e:
-        logger.error(f"Error managing email configuration: {str(e)}")
-        flash(f'Error managing email configuration: {str(e)}', 'error')
-        return redirect(url_for('dashboard'))
+        logger.error(f"Error adding email configuration: {str(e)}")
+        flash(f'Error adding email configuration: {str(e)}', 'error')
+        return redirect(url_for('email_configs'))
+    finally:
+        db.close_session(db_session)
+
+@app.route('/email-config/<int:config_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_email_config(config_id):
+    """Edit an existing email configuration."""
+    user_id = session.get('user_id')
+    db_session = db.get_session()
+
+    try:
+        # Get the email configuration
+        email_config = db_session.query(EmailConfiguration).filter(
+            EmailConfiguration.id == config_id,
+            EmailConfiguration.user_id == user_id
+        ).first()
+
+        if not email_config:
+            flash('Email configuration not found or you do not have permission to edit it', 'error')
+            return redirect(url_for('email_configs'))
+
+        if request.method == 'POST':
+            email_config.name = request.form.get('name', 'Default')
+            email_config.email_host = request.form.get('email_host')
+            email_config.email_port = int(request.form.get('email_port'))
+            email_config.email_username = request.form.get('email_username')
+
+            # Only update password if provided
+            new_password = request.form.get('email_password')
+            if new_password:
+                email_config.email_password = new_password
+
+            email_config.email_use_ssl = 'email_use_ssl' in request.form
+            email_config.bank_email_addresses = request.form.get('bank_email_addresses', '')
+            email_config.bank_email_subjects = request.form.get('bank_email_subjects', '')
+
+            db_session.commit()
+            flash('Email configuration updated successfully', 'success')
+            return redirect(url_for('email_configs'))
+
+        return render_template('edit_email_config.html', email_config=email_config)
+    except Exception as e:
+        logger.error(f"Error editing email configuration: {str(e)}")
+        flash(f'Error editing email configuration: {str(e)}', 'error')
+        return redirect(url_for('email_configs'))
+    finally:
+        db.close_session(db_session)
+
+@app.route('/email-config/<int:config_id>/delete', methods=['POST'])
+@login_required
+def delete_email_config(config_id):
+    """Delete an email configuration."""
+    user_id = session.get('user_id')
+    db_session = db.get_session()
+
+    try:
+        # Get the email configuration
+        email_config = db_session.query(EmailConfiguration).filter(
+            EmailConfiguration.id == config_id,
+            EmailConfiguration.user_id == user_id
+        ).first()
+
+        if not email_config:
+            flash('Email configuration not found or you do not have permission to delete it', 'error')
+            return redirect(url_for('email_configs'))
+
+        # Check if any accounts are using this configuration
+        accounts = db_session.query(Account).filter(
+            Account.email_config_id == config_id
+        ).first()
+
+        if accounts:
+            flash('Cannot delete email configuration that is being used by accounts', 'error')
+            return redirect(url_for('email_configs'))
+
+        db_session.delete(email_config)
+        db_session.commit()
+        flash('Email configuration deleted successfully', 'success')
+        return redirect(url_for('email_configs'))
+    except Exception as e:
+        logger.error(f"Error deleting email configuration: {str(e)}")
+        flash(f'Error deleting email configuration: {str(e)}', 'error')
+        return redirect(url_for('email_configs'))
     finally:
         db.close_session(db_session)
 
@@ -429,6 +767,11 @@ def parse_email():
 
     if not transaction_data:
         flash('Failed to parse email content. Make sure it contains valid transaction data.', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Check if the account is different
+    if account_number[-4:] not in transaction_data.get('account_number'):
+        flash(f'Transaction account number {transaction_data.get("account_number")} does not match selected account {account_number}', 'error')
         return redirect(url_for('dashboard'))
 
     # Add user_id and account_number to transaction data
@@ -611,7 +954,7 @@ def delete_transaction(transaction_id):
 @app.route('/fetch_emails', methods=['POST'])
 @login_required
 def fetch_emails():
-    """Fetch emails directly from the email account."""
+    """Start asynchronous email fetching process."""
     user_id = session.get('user_id')
     account_number = request.form.get('account_number')
 
@@ -619,95 +962,209 @@ def fetch_emails():
         flash('Please select an account', 'error')
         return redirect(url_for('dashboard'))
 
+    # Create a unique task ID
+    task_id = str(uuid.uuid4())
+
+    # Get form parameters
+    folder = request.form.get('folder', 'INBOX')
+    unread_only = 'unread_only' in request.form
+    save_to_db = 'save_to_db' in request.form
+
+    # Initialize task
+    with email_tasks_lock:
+        email_tasks[task_id] = {
+            'user_id': user_id,
+            'account_number': account_number,
+            'status': 'initializing',
+            'progress': 0,
+            'start_time': time.time(),
+            'folder': folder,
+            'unread_only': unread_only,
+            'save_to_db': save_to_db
+        }
+
+    # Start background thread
+    thread = threading.Thread(
+        target=process_emails_task,
+        args=(task_id, user_id, account_number, folder, unread_only, save_to_db)
+    )
+    thread.daemon = True
+    thread.start()
+
+    # Store task ID in session
+    session['email_task_id'] = task_id
+
+    # Redirect to email processing status page
+    return redirect(url_for('email_processing_status'))
+
+@app.route('/email_processing_status')
+@login_required
+def email_processing_status():
+    """Show email processing status page."""
+    task_id = session.get('email_task_id')
+
+    with email_tasks_lock:
+        if not task_id or task_id not in email_tasks:
+            flash('No email processing task found', 'error')
+            return redirect(url_for('dashboard'))
+
+        task = email_tasks[task_id].copy()  # Create a copy to avoid holding the lock
+
+    return render_template('email_processing.html', task_id=task_id, task=task)
+
+@app.route('/api/email_task_status/<task_id>')
+@login_required
+def email_task_status(task_id):
+    """API endpoint for checking email task status."""
+    with email_tasks_lock:
+        if task_id not in email_tasks:
+            return jsonify({'error': 'Task not found'}), 404
+
+        task = email_tasks[task_id].copy()  # Create a copy to avoid holding the lock
+
+    # Calculate elapsed time
+    elapsed_time = time.time() - task['start_time']
+
+    # Prepare response data
+    response = {
+        'status': task['status'],
+        'progress': task['progress'],
+        'elapsed_seconds': elapsed_time,
+        'message': task.get('message', '')
+    }
+
+    # Add estimated time if available
+    if 'estimated_seconds' in task:
+        response['estimated_seconds'] = task['estimated_seconds']
+
+    # Add completion data if task is completed
+    if task['status'] == 'completed':
+        response['parsed_count'] = task.get('parsed_count', 0)
+        response['saved_count'] = task.get('saved_count', 0)
+
+        # If there's a transaction, redirect to results
+        if 'first_transaction' in task:
+            # Store the transaction in session for the results page
+            session['transaction_data'] = task['first_transaction']
+            response['redirect_url'] = url_for('results')
+
+    return jsonify(response)
+
+@app.route('/api/test_email_connection/<int:config_id>')
+@login_required
+def test_email_connection(config_id):
+    """Test the email connection for a specific configuration."""
+    user_id = session.get('user_id')
     db_session = db.get_session()
+
     try:
-        # Create email service from user's configuration
-        email_service = EmailService.from_user_config(db_session, user_id)
+        # Get the email configuration
+        email_config = db_session.query(EmailConfiguration).filter(
+            EmailConfiguration.id == config_id,
+            EmailConfiguration.user_id == user_id
+        ).first()
 
-        if not email_service:
-            flash('Email configuration not found. Please set up your email first.', 'error')
-            return redirect(url_for('email_config'))
+        if not email_config:
+            return jsonify({
+                'success': False,
+                'message': 'Email configuration not found'
+            }), 404
 
-        # Connect to email
-        if not email_service.connect():
-            flash('Failed to connect to email server. Check your email settings.', 'error')
-            return redirect(url_for('dashboard'))
+        # Create email service from the configuration
+        email_service = EmailService(
+            host=email_config.email_host,
+            port=email_config.email_port,
+            username=email_config.email_username,
+            password=email_config.email_password,
+            use_ssl=email_config.email_use_ssl,
+            bank_email_addresses=[],
+            bank_email_subjects=[]
+        )
 
-        # Get bank emails
-        folder = request.form.get('folder', 'INBOX')
-        unread_only = 'unread_only' in request.form
-
-        emails = email_service.get_bank_emails(folder=folder, unread_only=unread_only)
-
-        if not emails:
-            flash('No bank emails found', 'info')
-            return redirect(url_for('dashboard'))
-
-        # Parse each email and store results
-        parsed_emails = []
-        saved_count = 0
-
-        for email_data in emails:
-            # Save email metadata
-            email_metadata = TransactionRepository.create_email_metadata(db_session, {
-                'user_id': user_id,
-                'id': email_data.get('id'),
-                'subject': email_data.get('subject', ''),
-                'from': email_data.get('from', ''),
-                # 'to': email_data.get('to', ''), TODO: Add 'to' from the user email, it not in the email data
-                'date': email_data.get('date', ''),
-                'body': email_data.get('body', ''),
-                'processed': True
+        # Test connection
+        if email_service.connect():
+            email_service.disconnect()
+            # Update last tested timestamp
+            email_config.last_tested = datetime.now()
+            db_session.commit()
+            return jsonify({
+                'success': True,
+                'message': 'Successfully connected to email server'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to connect to email server'
             })
 
-            # Parse email to extract transaction data
-            transaction_data = parser.parse_email(email_data)
-
-            if transaction_data:
-                # Add user_id, account_number, and email_metadata_id to transaction data
-                transaction_data['user_id'] = user_id
-                transaction_data['account_number'] = account_number
-
-                if email_metadata:
-                    transaction_data['email_metadata_id'] = email_metadata.id
-
-                parsed_emails.append({
-                    'email': email_data,
-                    'transaction': transaction_data
-                })
-
-                # Save to database if requested
-                save_to_db = 'save_to_db' in request.form
-                if save_to_db:
-                    transaction = TransactionRepository.create_transaction(
-                        db_session, transaction_data
-                    )
-                    if transaction:
-                        saved_count += 1
-
-        if not parsed_emails:
-            flash('No transaction data found in the emails', 'info')
-            return redirect(url_for('dashboard'))
-
-        # Store the first transaction in session for display
-        session['transaction_data'] = parsed_emails[0]['transaction']
-
-        if 'save_to_db' in request.form:
-            if saved_count > 0:
-                flash(f'Saved {saved_count} transactions to database', 'success')
-            else:
-                flash('Failed to save transactions to database', 'error')
-
-        # Disconnect from email
-        email_service.disconnect()
-
-        return redirect(url_for('results'))
     except Exception as e:
-        logger.error(f"Error fetching emails: {str(e)}")
-        flash(f'Error fetching emails: {str(e)}', 'error')
-        return redirect(url_for('dashboard'))
+        logger.error(f"Error testing email connection: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
     finally:
         db.close_session(db_session)
+
+# Add session configuration
+app.permanent_session_lifetime = timedelta(days=30)
+
+@app.before_request
+def before_request():
+    """Ensure user session is handled properly."""
+    # Make session permanent
+    session.permanent = True
+
+    # Check if user is logged in and update session timestamp
+    if 'user_id' in session:
+        session['last_activity'] = time.time()
+
+    # Clear old tasks from email_tasks dict
+    current_time = time.time()
+    tasks_to_remove = []
+
+    with email_tasks_lock:
+        for task_id, task in email_tasks.items():
+            # Remove tasks older than 1 hour
+            if 'end_time' in task and (current_time - task['end_time']) > 3600:
+                tasks_to_remove.append(task_id)
+
+        for task_id in tasks_to_remove:
+            email_tasks.pop(task_id, None)
+
+@app.after_request
+def after_request(response):
+    """Add security headers to response."""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    return response
+
+# Error handlers
+@app.errorhandler(404)
+def not_found_error(error):
+    return render_template('errors/404.html'), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return render_template('errors/500.html'), 500
+
+# Add CSRF protection
+def generate_csrf_token():
+    if 'csrf_token' not in session:
+        session['csrf_token'] = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(32))
+    return session['csrf_token']
+
+app.jinja_env.globals['csrf_token'] = generate_csrf_token
+
+@app.before_request
+def csrf_protect():
+    if request.method == "POST":
+        token = session.get('csrf_token', None)
+        if not token or token != request.form.get('csrf_token'):
+            flash('Invalid form submission, please try again', 'error')
+            return redirect(url_for('index'))
 
 if __name__ == '__main__':
     app.run(debug=True)
