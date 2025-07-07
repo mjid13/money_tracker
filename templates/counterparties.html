@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Counterparties - Money Tracker{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-0">Counterparties</h1>
+            <p class="text-muted mb-0">Manage and categorize unique transaction counterparties</p>
+        </div>
+        <a href="{{ url_for('auto_categorize') }}" class="btn btn-primary">
+            <i class="bi bi-magic me-2"></i>Auto-Categorize All
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="alert alert-info mb-4">
+                <h5 class="alert-heading"><i class="bi bi-info-circle me-2"></i>About Counterparties</h5>
+                <p class="mb-0">Counterparties are the people or businesses you transact with. Each unique combination of counterparty name and description is listed here. You can categorize them to automatically organize your transactions.</p>
+            </div>
+
+            {% if counterparties %}
+            <div class="table-responsive">
+                <table class="table table-hover" id="counterpartiesTable">
+                    <thead>
+                        <tr>
+                            <th>Counterparty</th>
+                            <th>Description</th>
+                            <th>Transaction Details</th>
+                            <th>Current Category</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cp in counterparties %}
+                        <tr>
+                            <td>{{ cp.counterparty_name }}</td>
+                            <td>{{ cp.description or '-' }}</td>
+                            <td>{{ cp.transaction_details or '-' }}</td>
+                            <td>
+                                {% if cp.category_name %}
+                                <span class="badge bg-primary">{{ cp.category_name }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Uncategorized</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-primary" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#categorizeModal{{ loop.index }}">
+                                    <i class="bi bi-tag me-1"></i>Categorize
+                                </button>
+
+                                <!-- Categorize Modal -->
+                                <div class="modal fade" id="categorizeModal{{ loop.index }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Categorize Counterparty</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <form action="{{ url_for('categorize_counterparty') }}" method="post">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="counterparty_name" value="{{ cp.counterparty_name }}">
+                                                <input type="hidden" name="description" value="{{ cp.description or '' }}">
+                                                
+                                                <div class="modal-body">
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Counterparty</label>
+                                                        <input type="text" class="form-control" value="{{ cp.counterparty_name }}" readonly>
+                                                    </div>
+                                                    
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Description</label>
+                                                        <input type="text" class="form-control" value="{{ cp.description or '' }}" readonly>
+                                                    </div>
+                                                    
+                                                    <div class="mb-3">
+                                                        <label for="category_id" class="form-label">Category</label>
+                                                        <select class="form-select" id="category_id" name="category_id" required>
+                                                            <option value="">Select a category</option>
+                                                            {% for category in categories %}
+                                                            <option value="{{ category.id }}" {% if cp.category_id == category.id %}selected{% endif %}>
+                                                                {{ category.name }}
+                                                            </option>
+                                                            {% endfor %}
+                                                        </select>
+                                                    </div>
+                                                    
+                                                    <div class="alert alert-info">
+                                                        <small class="mb-0">
+                                                            <i class="bi bi-info-circle me-1"></i>
+                                                            This will categorize all transactions with this counterparty and description, and create mappings for future transactions.
+                                                        </small>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                    <button type="submit" class="btn btn-primary">Save Category</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-people display-4 text-muted"></i>
+                <p class="mt-3 mb-4">No counterparties found. Process some transactions first.</p>
+                <a href="{{ url_for('dashboard') }}" class="btn btn-primary">
+                    <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+        </a>
+    </div>
+</div>
+
+{% block extra_js %}
+{% if counterparties %}
+<script>
+    // Initialize DataTable for better searching and pagination
+    $(document).ready(function() {
+        $('#counterpartiesTable').DataTable({
+            "pageLength": 25,
+            "order": [[0, "asc"]],
+            "language": {
+                "search": "Search counterparties:",
+                "lengthMenu": "Show _MENU_ counterparties per page",
+                "info": "Showing _START_ to _END_ of _TOTAL_ counterparties"
+            }
+        });
+    });
+</script>
+{% endif %}
+{% endblock %}
+{% endblock %}
