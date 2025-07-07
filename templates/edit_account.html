@@ -23,6 +23,7 @@
             </div>
             <div class="card-body">
                 <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
                         <label for="account_number" class="form-label">Account Number *</label>
                         <input type="text" class="form-control" id="account_number" name="account_number" value="{{ account.account_number }}" required>
@@ -92,6 +93,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <form action="{{ url_for('delete_account', account_id=account.id) }}" method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-danger">Delete Account</button>
                 </form>
             </div>

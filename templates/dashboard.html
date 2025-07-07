@@ -52,6 +52,11 @@
                                 <h5 class="mb-1 d-flex align-items-center">
                                     <i class="bi bi-bank2 me-2"></i>
                                     {{ account.bank_name }}
+                                    {% if account.account_number in scraping_account_numbers %}
+                                    <span class="badge bg-warning text-dark ms-2">
+                                        <i class="bi bi-arrow-repeat me-1 spin"></i>Scraping
+                                    </span>
+                                    {% endif %}
                                 </h5>
                                 <p class="mb-1 text-body-secondary">Account: {{ account.account_number }}</p>
                                 <small class="text-body-secondary">Holder: {{ account.account_holder }}</small>
@@ -84,13 +89,15 @@
             <div class="card-body">
                 {% if accounts %}
                 <form action="{{ url_for('fetch_emails') }}" method="post" class="needs-validation" novalidate>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-4">
                         <label for="account_number" class="form-label">Select Account</label>
                         <select class="form-select form-select-lg" id="account_number" name="account_number" required>
                             <option value="">Select an account</option>
                             {% for account in accounts %}
-                            <option value="{{ account.account_number }}">
+                            <option value="{{ account.account_number }}" {% if account.account_number in scraping_account_numbers %}disabled{% endif %}>
                                 {{ account.bank_name }} - {{ account.account_number }}
+                                {% if account.account_number in scraping_account_numbers %}(Scraping in progress...){% endif %}
                             </option>
                             {% endfor %}
                         </select>
@@ -112,6 +119,10 @@
                         <div class="form-check form-switch mt-2">
                             <input type="checkbox" class="form-check-input" id="save_to_db" name="save_to_db" checked>
                             <label class="form-check-label" for="save_to_db">Save transactions to database</label>
+                        </div>
+                        <div class="form-check form-switch mt-2">
+                            <input type="checkbox" class="form-check-input" id="preserve_balance" name="preserve_balance" checked>
+                            <label class="form-check-label" for="preserve_balance">Preserve initial account balance during first scrape</label>
                         </div>
                     </div>
 
@@ -155,8 +166,9 @@
                                 <select class="form-select" id="account_number" name="account_number" required>
                                     <option value="">Select an account</option>
                                     {% for account in accounts %}
-                                    <option value="{{ account.account_number }}">
+                                    <option value="{{ account.account_number }}" {% if account.account_number in scraping_account_numbers %}disabled{% endif %}>
                                         {{ account.bank_name }} - {{ account.account_number }}
+                                        {% if account.account_number in scraping_account_numbers %}(Scraping in progress...){% endif %}
                                     </option>
                                     {% endfor %}
                                 </select>
@@ -178,6 +190,10 @@
                                 <div class="form-check">
                                     <input type="checkbox" class="form-check-input" id="save_to_db" name="save_to_db" checked>
                                     <label class="form-check-label" for="save_to_db">Save transaction to database</label>
+                                </div>
+                                <div class="form-check mt-2">
+                                    <input type="checkbox" class="form-check-input" id="preserve_balance" name="preserve_balance" checked>
+                                    <label class="form-check-label" for="preserve_balance">Preserve initial account balance during first scrape</label>
                                 </div>
                             </div>
 
@@ -205,8 +221,9 @@
                                 <select class="form-select" id="account_number" name="account_number" required>
                                     <option value="">Select an account</option>
                                     {% for account in accounts %}
-                                    <option value="{{ account.account_number }}">
+                                    <option value="{{ account.account_number }}" {% if account.account_number in scraping_account_numbers %}disabled{% endif %}>
                                         {{ account.bank_name }} - {{ account.account_number }}
+                                        {% if account.account_number in scraping_account_numbers %}(Scraping in progress...){% endif %}
                                     </option>
                                     {% endfor %}
                                 </select>
@@ -229,6 +246,10 @@
                                 <div class="form-check">
                                     <input type="checkbox" class="form-check-input" id="save_to_db" name="save_to_db" checked>
                                     <label class="form-check-label" for="save_to_db">Save transaction to database</label>
+                                </div>
+                                <div class="form-check mt-2">
+                                    <input type="checkbox" class="form-check-input" id="preserve_balance" name="preserve_balance" checked>
+                                    <label class="form-check-label" for="preserve_balance">Preserve initial account balance during first scrape</label>
                                 </div>
                             </div>
 
@@ -281,6 +302,17 @@
     .form-check-input:checked {
         background-color: var(--bs-primary);
         border-color: var(--bs-primary);
+    }
+
+    /* Spinning animation for the scraping icon */
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .spin {
+        animation: spin 2s linear infinite;
+        display: inline-block;
     }
 </style>
 {% endblock %}

@@ -58,7 +58,11 @@
                             <div class="col-md-6">
                                 <div class="detail-group">
                                     <label class="text-body-secondary mb-1">Date</label>
-                                    <p class="h6 mb-0">{{ transaction.date_time.strftime('%Y-%m-%d %H:%M') }}</p>
+                                    {% if transaction.date_time %}
+                                           <p class="h6 mb-0">{{ transaction.date_time.strftime('%Y-%m-%d %H:%M') }}</p>
+                                            {% else %}
+                                                N/A
+                                            {% endif %}
                                 </div>
                             </div>
                             <div class="col-12">

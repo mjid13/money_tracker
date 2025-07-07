@@ -435,12 +435,29 @@ class TransactionRepository:
             session.add(transaction)
             session.commit()
 
-            # Update account balance
-            if transaction_type == TransactionType.INCOME:
-                account.balance += transaction.amount
-            elif transaction_type == TransactionType.EXPENSE:
-                account.balance -= transaction.amount
-            session.commit()
+            # Check if we should update the account balance
+            preserve_balance = transaction_data.get('preserve_balance', False)
+
+            # Only preserve balance if the flag is set and this is a first scrape
+            # We determine if it's a first scrape by checking if there are existing transactions
+            # Note: We need to check this before adding the current transaction
+            is_first_scrape = False
+            if preserve_balance:
+                # We need to exclude the current transaction from the count
+                # Since we just added it, we need to check if there were any transactions before
+                existing_transactions_count = session.query(Transaction).filter(
+                    Transaction.account_id == account.id,
+                    Transaction.id != transaction.id  # Exclude the current transaction
+                ).count()
+                is_first_scrape = existing_transactions_count == 0
+
+            # Update balance if we're not preserving balance or if this is not the first scrape
+            if not (preserve_balance and is_first_scrape):
+                if transaction_type == TransactionType.INCOME:
+                    account.balance += transaction.amount
+                elif transaction_type == TransactionType.EXPENSE:
+                    account.balance -= transaction.amount
+                session.commit()
 
             logger.info(f"Created transaction: {transaction.id}")
             return transaction

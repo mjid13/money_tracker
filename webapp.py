@@ -52,7 +52,11 @@ db.create_tables()
 email_tasks = {}
 email_tasks_lock = Lock()
 
-def process_emails_task(task_id, user_id, account_number, folder, unread_only, save_to_db):
+# Dictionary to track which accounts are currently being scraped
+# Format: {account_number: {'user_id': user_id, 'task_id': task_id, 'start_time': time.time()}}
+scraping_accounts = {}
+
+def process_emails_task(task_id, user_id, account_number, folder, unread_only, save_to_db, preserve_balance):
     """Background task for processing emails."""
     db_session = db.get_session()
     try:
@@ -179,6 +183,8 @@ def process_emails_task(task_id, user_id, account_number, folder, unread_only, s
 
                 # Save to database if requested
                 if save_to_db:
+                    # Add preserve_balance flag to transaction data
+                    transaction_data['preserve_balance'] = preserve_balance
                     transaction = TransactionRepository.create_transaction(
                         db_session, transaction_data
                     )
@@ -206,6 +212,9 @@ def process_emails_task(task_id, user_id, account_number, folder, unread_only, s
             email_tasks[task_id]['status'] = 'error'
             email_tasks[task_id]['message'] = str(e)
     finally:
+        # Remove the account from scraping_accounts
+        with email_tasks_lock:
+            scraping_accounts.pop(account_number, None)
         db.close_session(db_session)
 
 # Login required decorator
@@ -333,9 +342,14 @@ def dashboard():
             EmailConfiguration.user_id == user_id
         ).all()
 
+        # Get the list of accounts that are currently being scraped
+        with email_tasks_lock:
+            scraping_account_numbers = list(scraping_accounts.keys())
+
         return render_template('dashboard.html', 
                               accounts=accounts, 
-                              email_configs=email_configs)
+                              email_configs=email_configs,
+                              scraping_account_numbers=scraping_account_numbers)
     except Exception as e:
         logger.error(f"Error loading dashboard: {str(e)}")
         flash('Error loading dashboard. Please try again.', 'error')
@@ -784,9 +798,13 @@ def parse_email():
 
     # Optionally save to database if requested
     save_to_db = 'save_to_db' in request.form
+    preserve_balance = 'preserve_balance' in request.form
+
     if save_to_db:
         db_session = db.get_session()
         try:
+            # Add preserve_balance flag to transaction data
+            transaction_data['preserve_balance'] = preserve_balance
             transaction = TransactionRepository.create_transaction(db_session, transaction_data)
             if transaction:
                 flash('Transaction saved to database', 'success')
@@ -962,40 +980,84 @@ def fetch_emails():
         flash('Please select an account', 'error')
         return redirect(url_for('dashboard'))
 
-    # Create a unique task ID
-    task_id = str(uuid.uuid4())
-
-    # Get form parameters
-    folder = request.form.get('folder', 'INBOX')
-    unread_only = 'unread_only' in request.form
-    save_to_db = 'save_to_db' in request.form
-
-    # Initialize task
+    # Check if the account is already being scraped
     with email_tasks_lock:
-        email_tasks[task_id] = {
-            'user_id': user_id,
-            'account_number': account_number,
-            'status': 'initializing',
-            'progress': 0,
-            'start_time': time.time(),
-            'folder': folder,
-            'unread_only': unread_only,
-            'save_to_db': save_to_db
-        }
+        if account_number in scraping_accounts:
+            flash('This account is already being scraped. Please wait until it completes.', 'error')
+            return redirect(url_for('dashboard'))
 
-    # Start background thread
-    thread = threading.Thread(
-        target=process_emails_task,
-        args=(task_id, user_id, account_number, folder, unread_only, save_to_db)
-    )
-    thread.daemon = True
-    thread.start()
+        # Create a unique task ID
+    try:
+        task_id = str(uuid.uuid4())
 
-    # Store task ID in session
-    session['email_task_id'] = task_id
+        # Get form parameters
+        folder = request.form.get('folder', 'INBOX')
+        unread_only = 'unread_only' in request.form
+        save_to_db = 'save_to_db' in request.form
+        preserve_balance = 'preserve_balance' in request.form
 
-    # Redirect to email processing status page
-    return redirect(url_for('email_processing_status'))
+        # Initialize task
+        try:
+            with email_tasks_lock:
+                email_tasks[task_id] = {
+                    'user_id': user_id,
+                    'account_number': account_number,
+                    'status': 'initializing',
+                    'progress': 0,
+                    'start_time': time.time(),
+                    'folder': folder,
+                    'unread_only': unread_only,
+                    'save_to_db': save_to_db,
+                    'preserve_balance': preserve_balance
+                }
+
+                # Mark the account as being scraped
+                scraping_accounts[account_number] = {
+                    'user_id': user_id,
+                    'task_id': task_id,
+                    'start_time': time.time()
+                }
+        except Exception as e:
+            logger.error(f"Error initializing email task: {str(e)}")
+            flash('Failed to initialize email processing task', 'error')
+            return redirect(url_for('dashboard'))
+
+        # Start background thread
+        try:
+            thread = threading.Thread(
+                target=process_emails_task,
+                args=(task_id, user_id, account_number, folder, unread_only, save_to_db, preserve_balance)
+            )
+            thread.daemon = True
+            thread.start()
+        except Exception as e:
+            logger.error(f"Error starting email processing thread: {str(e)}")
+            with email_tasks_lock:
+                email_tasks.pop(task_id, None)
+                # Remove the account from scraping_accounts
+                scraping_accounts.pop(account_number, None)
+            flash('Failed to start email processing task', 'error')
+            return redirect(url_for('dashboard'))
+
+        # Store task ID in session
+        try:
+            session['email_task_id'] = task_id
+        except Exception as e:
+            logger.error(f"Error storing task ID in session: {str(e)}")
+            with email_tasks_lock:
+                email_tasks.pop(task_id, None)
+                # Remove the account from scraping_accounts
+                scraping_accounts.pop(account_number, None)
+            flash('Failed to store task information', 'error')
+            return redirect(url_for('dashboard'))
+
+        # Redirect to email processing status page
+        return redirect(url_for('email_processing_status'))
+
+    except Exception as e:
+        logger.error(f"Unexpected error in fetch_emails: {str(e)}")
+        flash('An unexpected error occurred', 'error')
+        return redirect(url_for('dashboard'))
 
 @app.route('/email_processing_status')
 @login_required
@@ -1122,8 +1184,10 @@ def before_request():
     # Clear old tasks from email_tasks dict
     current_time = time.time()
     tasks_to_remove = []
+    accounts_to_remove = []
 
     with email_tasks_lock:
+        # Clean up old tasks
         for task_id, task in email_tasks.items():
             # Remove tasks older than 1 hour
             if 'end_time' in task and (current_time - task['end_time']) > 3600:
@@ -1131,6 +1195,14 @@ def before_request():
 
         for task_id in tasks_to_remove:
             email_tasks.pop(task_id, None)
+
+        # Clean up stale scraping_accounts entries (older than 30 minutes)
+        for account_number, account_info in scraping_accounts.items():
+            if (current_time - account_info['start_time']) > 1800:  # 30 minutes
+                accounts_to_remove.append(account_number)
+
+        for account_number in accounts_to_remove:
+            scraping_accounts.pop(account_number, None)
 
 @app.after_request
 def after_request(response):
