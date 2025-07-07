@@ -13,6 +13,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 logger = logging.getLogger(__name__)
 
+class CategoryType(enum.Enum):
+    """Enum for category types."""
+    COUNTERPARTY = 'counterparty'
+    DESCRIPTION = 'description'
+
 class TransactionType(enum.Enum):
     """Enum for transaction types."""
     INCOME = 'income'
@@ -102,6 +107,7 @@ class EmailMetadata(Base):
     recipient = Column(String(200))
     date = Column(String(200))
     body = Column(Text)
+    cleaned_body = Column(Text)  # Added field for cleaned email content
     processed = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -109,6 +115,47 @@ class EmailMetadata(Base):
     # Relationships
     user = relationship("User")
     transactions = relationship("Transaction", back_populates="email_metadata")
+
+class Category(Base):
+    """Category model for transaction categorization."""
+    __tablename__ = 'categories'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User")
+    mappings = relationship("CategoryMapping", back_populates="category", cascade="all, delete-orphan")
+
+    # Ensure category names are unique per user
+    __table_args__ = (
+        UniqueConstraint('user_id', 'name', name='_user_category_uc'),
+    )
+
+
+class CategoryMapping(Base):
+    """Model for mapping transactions to categories based on counterparty or description."""
+    __tablename__ = 'category_mappings'
+
+    id = Column(Integer, primary_key=True)
+    category_id = Column(Integer, ForeignKey('categories.id'), nullable=False)
+    mapping_type = Column(Enum(CategoryType), nullable=False)
+    pattern = Column(String(500), nullable=False)  # counterparty_name or description pattern
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    category = relationship("Category", back_populates="mappings")
+
+    # Ensure patterns are unique per category and type
+    __table_args__ = (
+        UniqueConstraint('category_id', 'mapping_type', 'pattern', name='_category_mapping_uc'),
+    )
+
 
 class Transaction(Base):
     """Transaction model representing a financial transaction."""
@@ -123,6 +170,7 @@ class Transaction(Base):
     date_time = Column(DateTime, nullable=True)
     description = Column(Text)
     transaction_id = Column(String(100))  # Bank's transaction reference
+    category_id = Column(Integer, ForeignKey('categories.id'), nullable=True)
 
     # Bank-specific fields
     bank_name = Column(String(100))
@@ -155,6 +203,463 @@ class Transaction(Base):
     # Relationships
     account = relationship("Account", back_populates="transactions")
     email_metadata = relationship("EmailMetadata", back_populates="transactions")
+    category = relationship("Category")
+
+class CategoryRepository:
+    """Repository class for category operations."""
+
+    @staticmethod
+    def create_category(session: Session, user_id: int, name: str, description: str = None) -> Optional[Category]:
+        """
+        Create a new category.
+
+        Args:
+            session (Session): Database session.
+            user_id (int): User ID.
+            name (str): Category name.
+            description (str, optional): Category description.
+
+        Returns:
+            Optional[Category]: Created category or None if creation fails.
+        """
+        try:
+            # Check if category already exists for this user
+            existing_category = session.query(Category).filter(
+                Category.user_id == user_id,
+                Category.name == name
+            ).first()
+
+            if existing_category:
+                logger.info(f"Category {name} already exists for user {user_id}")
+                return existing_category
+
+            category = Category(
+                user_id=user_id,
+                name=name,
+                description=description
+            )
+
+            session.add(category)
+            session.commit()
+            logger.info(f"Created category: {category.name} for user {user_id}")
+            return category
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error creating category: {str(e)}")
+            return None
+
+    @staticmethod
+    def get_categories(session: Session, user_id: int) -> List[Category]:
+        """
+        Get all categories for a user.
+
+        Args:
+            session (Session): Database session.
+            user_id (int): User ID.
+
+        Returns:
+            List[Category]: List of user's categories.
+        """
+        try:
+            categories = session.query(Category).filter(
+                Category.user_id == user_id
+            ).all()
+
+            return categories
+
+        except Exception as e:
+            logger.error(f"Error getting categories: {str(e)}")
+            return []
+
+    @staticmethod
+    def get_category(session: Session, category_id: int, user_id: int) -> Optional[Category]:
+        """
+        Get a category by ID.
+
+        Args:
+            session (Session): Database session.
+            category_id (int): Category ID.
+            user_id (int): User ID (for permission check).
+
+        Returns:
+            Optional[Category]: Category or None if not found.
+        """
+        try:
+            category = session.query(Category).filter(
+                Category.id == category_id,
+                Category.user_id == user_id
+            ).first()
+
+            return category
+
+        except Exception as e:
+            logger.error(f"Error getting category: {str(e)}")
+            return None
+
+    @staticmethod
+    def update_category(session: Session, category_id: int, user_id: int, 
+                        name: str = None, description: str = None) -> Optional[Category]:
+        """
+        Update a category.
+
+        Args:
+            session (Session): Database session.
+            category_id (int): Category ID.
+            user_id (int): User ID (for permission check).
+            name (str, optional): New category name.
+            description (str, optional): New category description.
+
+        Returns:
+            Optional[Category]: Updated category or None if update fails.
+        """
+        try:
+            category = session.query(Category).filter(
+                Category.id == category_id,
+                Category.user_id == user_id
+            ).first()
+
+            if not category:
+                logger.error(f"Category {category_id} not found or user {user_id} does not have permission")
+                return None
+
+            if name is not None:
+                category.name = name
+
+            if description is not None:
+                category.description = description
+
+            session.commit()
+            logger.info(f"Updated category: {category.id}")
+            return category
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error updating category: {str(e)}")
+            return None
+
+    @staticmethod
+    def delete_category(session: Session, category_id: int, user_id: int) -> bool:
+        """
+        Delete a category.
+
+        Args:
+            session (Session): Database session.
+            category_id (int): Category ID.
+            user_id (int): User ID (for permission check).
+
+        Returns:
+            bool: True if deletion is successful, False otherwise.
+        """
+        try:
+            category = session.query(Category).filter(
+                Category.id == category_id,
+                Category.user_id == user_id
+            ).first()
+
+            if not category:
+                logger.error(f"Category {category_id} not found or user {user_id} does not have permission")
+                return False
+
+            # Remove category from transactions
+            session.query(Transaction).filter(
+                Transaction.category_id == category_id
+            ).update({Transaction.category_id: None})
+
+            session.delete(category)
+            session.commit()
+            logger.info(f"Deleted category: {category_id}")
+            return True
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error deleting category: {str(e)}")
+            return False
+
+    @staticmethod
+    def create_category_mapping(session: Session, category_id: int, user_id: int, 
+                               mapping_type: CategoryType, pattern: str) -> Optional[CategoryMapping]:
+        """
+        Create a new category mapping.
+
+        Args:
+            session (Session): Database session.
+            category_id (int): Category ID.
+            user_id (int): User ID (for permission check).
+            mapping_type (CategoryType): Type of mapping (COUNTERPARTY or DESCRIPTION).
+            pattern (str): Pattern to match (counterparty_name or description).
+
+        Returns:
+            Optional[CategoryMapping]: Created mapping or None if creation fails.
+        """
+        try:
+            # Check if category exists and belongs to user
+            category = session.query(Category).filter(
+                Category.id == category_id,
+                Category.user_id == user_id
+            ).first()
+
+            if not category:
+                logger.error(f"Category {category_id} not found or user {user_id} does not have permission")
+                return None
+
+            # Check if mapping already exists
+            existing_mapping = session.query(CategoryMapping).filter(
+                CategoryMapping.category_id == category_id,
+                CategoryMapping.mapping_type == mapping_type,
+                CategoryMapping.pattern == pattern
+            ).first()
+
+            if existing_mapping:
+                logger.info(f"Mapping for pattern '{pattern}' already exists for category {category_id}")
+                return existing_mapping
+
+            # Check if pattern is already mapped to another category
+            existing_pattern_mapping = session.query(CategoryMapping).join(Category).filter(
+                CategoryMapping.mapping_type == mapping_type,
+                CategoryMapping.pattern == pattern,
+                Category.user_id == user_id
+            ).first()
+
+            if existing_pattern_mapping:
+                # Delete the existing mapping
+                session.delete(existing_pattern_mapping)
+                logger.info(f"Removed existing mapping for pattern '{pattern}' from category {existing_pattern_mapping.category_id}")
+
+            mapping = CategoryMapping(
+                category_id=category_id,
+                mapping_type=mapping_type,
+                pattern=pattern
+            )
+
+            session.add(mapping)
+            session.commit()
+            logger.info(f"Created category mapping: {mapping.id} for category {category_id}")
+
+            # Update transactions that match this pattern
+            if mapping_type == CategoryType.COUNTERPARTY:
+                session.query(Transaction).join(Account).filter(
+                    Account.user_id == user_id,
+                    Transaction.counterparty_name == pattern
+                ).update({Transaction.category_id: category_id}, synchronize_session=False)
+            else:  # DESCRIPTION
+                session.query(Transaction).join(Account).filter(
+                    Account.user_id == user_id,
+                    Transaction.description == pattern
+                ).update({Transaction.category_id: category_id}, synchronize_session=False)
+
+            session.commit()
+            return mapping
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error creating category mapping: {str(e)}")
+            return None
+
+    @staticmethod
+    def delete_category_mapping(session: Session, mapping_id: int, user_id: int) -> bool:
+        """
+        Delete a category mapping.
+
+        Args:
+            session (Session): Database session.
+            mapping_id (int): Mapping ID.
+            user_id (int): User ID (for permission check).
+
+        Returns:
+            bool: True if deletion is successful, False otherwise.
+        """
+        try:
+            mapping = session.query(CategoryMapping).join(Category).filter(
+                CategoryMapping.id == mapping_id,
+                Category.user_id == user_id
+            ).first()
+
+            if not mapping:
+                logger.error(f"Mapping {mapping_id} not found or user {user_id} does not have permission")
+                return False
+
+            session.delete(mapping)
+            session.commit()
+            logger.info(f"Deleted category mapping: {mapping_id}")
+            return True
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error deleting category mapping: {str(e)}")
+            return False
+
+    @staticmethod
+    def get_category_mappings(session: Session, category_id: int, user_id: int) -> List[CategoryMapping]:
+        """
+        Get all mappings for a category.
+
+        Args:
+            session (Session): Database session.
+            category_id (int): Category ID.
+            user_id (int): User ID (for permission check).
+
+        Returns:
+            List[CategoryMapping]: List of category mappings.
+        """
+        try:
+            mappings = session.query(CategoryMapping).join(Category).filter(
+                CategoryMapping.category_id == category_id,
+                Category.user_id == user_id
+            ).all()
+
+            return mappings
+
+        except Exception as e:
+            logger.error(f"Error getting category mappings: {str(e)}")
+            return []
+
+    @staticmethod
+    def auto_categorize_transaction(session: Session, transaction_id: int, user_id: int) -> Optional[Transaction]:
+        """
+        Auto-categorize a transaction based on counterparty_name or description.
+
+        Args:
+            session (Session): Database session.
+            transaction_id (int): Transaction ID.
+            user_id (int): User ID (for permission check).
+
+        Returns:
+            Optional[Transaction]: Categorized transaction or None if categorization fails.
+        """
+        try:
+            transaction = session.query(Transaction).join(Account).filter(
+                Transaction.id == transaction_id,
+                Account.user_id == user_id
+            ).first()
+
+            if not transaction:
+                logger.error(f"Transaction {transaction_id} not found or user {user_id} does not have permission")
+                return None
+
+            # Try to categorize by exact counterparty_name match first
+            if transaction.counterparty_name:
+                mapping = session.query(CategoryMapping).join(Category).filter(
+                    CategoryMapping.mapping_type == CategoryType.COUNTERPARTY,
+                    CategoryMapping.pattern == transaction.counterparty_name,
+                    Category.user_id == user_id
+                ).first()
+
+                if mapping:
+                    transaction.category_id = mapping.category_id
+                    session.commit()
+                    logger.info(f"Auto-categorized transaction {transaction_id} by exact counterparty_name match")
+                    return transaction
+
+            # Try to categorize by exact description match
+            if transaction.description:
+                mapping = session.query(CategoryMapping).join(Category).filter(
+                    CategoryMapping.mapping_type == CategoryType.DESCRIPTION,
+                    CategoryMapping.pattern == transaction.description,
+                    Category.user_id == user_id
+                ).first()
+
+                if mapping:
+                    transaction.category_id = mapping.category_id
+                    session.commit()
+                    logger.info(f"Auto-categorized transaction {transaction_id} by exact description match")
+                    return transaction
+
+            # If no exact matches, try pattern matching for counterparty_name
+            if transaction.counterparty_name:
+                # Get all counterparty mappings for this user
+                counterparty_mappings = session.query(CategoryMapping).join(Category).filter(
+                    CategoryMapping.mapping_type == CategoryType.COUNTERPARTY,
+                    Category.user_id == user_id
+                ).all()
+
+                # Check each pattern
+                for mapping in counterparty_mappings:
+                    if mapping.pattern in transaction.counterparty_name:
+                        transaction.category_id = mapping.category_id
+                        session.commit()
+                        logger.info(f"Auto-categorized transaction {transaction_id} by counterparty_name pattern match")
+                        return transaction
+
+            # Try pattern matching for description
+            if transaction.description:
+                # Get all description mappings for this user
+                description_mappings = session.query(CategoryMapping).join(Category).filter(
+                    CategoryMapping.mapping_type == CategoryType.DESCRIPTION,
+                    Category.user_id == user_id
+                ).all()
+
+                # Check each pattern
+                for mapping in description_mappings:
+                    if mapping.pattern in transaction.description:
+                        transaction.category_id = mapping.category_id
+                        session.commit()
+                        logger.info(f"Auto-categorized transaction {transaction_id} by description pattern match")
+                        return transaction
+
+            logger.info(f"Could not auto-categorize transaction {transaction_id}")
+            return transaction
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error auto-categorizing transaction: {str(e)}")
+            return None
+
+    @staticmethod
+    def categorize_transaction(session: Session, transaction_id: int, category_id: int, user_id: int) -> Optional[Transaction]:
+        """
+        Manually categorize a transaction.
+
+        Args:
+            session (Session): Database session.
+            transaction_id (int): Transaction ID.
+            category_id (int): Category ID.
+            user_id (int): User ID (for permission check).
+
+        Returns:
+            Optional[Transaction]: Categorized transaction or None if categorization fails.
+        """
+        try:
+            transaction = session.query(Transaction).join(Account).filter(
+                Transaction.id == transaction_id,
+                Account.user_id == user_id
+            ).first()
+
+            if not transaction:
+                logger.error(f"Transaction {transaction_id} not found or user {user_id} does not have permission")
+                return None
+
+            category = session.query(Category).filter(
+                Category.id == category_id,
+                Category.user_id == user_id
+            ).first()
+
+            if not category:
+                logger.error(f"Category {category_id} not found or user {user_id} does not have permission")
+                return None
+
+            transaction.category_id = category_id
+            session.commit()
+            logger.info(f"Categorized transaction {transaction_id} as {category.name}")
+
+            # Create mapping if it doesn't exist
+            if transaction.counterparty_name:
+                CategoryRepository.create_category_mapping(
+                    session, category_id, user_id, CategoryType.COUNTERPARTY, transaction.counterparty_name
+                )
+
+            if transaction.description:
+                CategoryRepository.create_category_mapping(
+                    session, category_id, user_id, CategoryType.DESCRIPTION, transaction.description
+                )
+
+            return transaction
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error categorizing transaction: {str(e)}")
+            return None
+
 
 class TransactionRepository:
     """Repository class for transaction operations."""
@@ -323,6 +828,7 @@ class TransactionRepository:
                 recipient=email_data.get('to', ''),
                 date=email_data.get('date', ''),
                 body=email_data.get('body', ''),
+                cleaned_body=email_data.get('cleaned_body', ''),
                 processed=email_data.get('processed', False)
             )
 

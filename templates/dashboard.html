@@ -28,6 +28,15 @@
                 <a href="{{ url_for('accounts') }}" class="btn btn-outline-primary">
                     <i class="bi bi-bank me-2"></i>View All Accounts
                 </a>
+                <a href="{{ url_for('categories') }}" class="btn btn-outline-primary">
+                    <i class="bi bi-tags me-2"></i>Categories
+                </a>
+                <a href="{{ url_for('counterparties') }}" class="btn btn-outline-primary">
+                    <i class="bi bi-people me-2"></i>Counterparties
+                </a>
+                <a href="{{ url_for('auto_categorize') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-magic me-2"></i>Auto-Categorize
+                </a>
             </div>
         </div>
     </div>
@@ -95,7 +104,7 @@
                         <select class="form-select form-select-lg" id="account_number" name="account_number" required>
                             <option value="">Select an account</option>
                             {% for account in accounts %}
-                            <option value="{{ account.account_number }}" {% if account.account_number in scraping_account_numbers %}disabled{% endif %}>
+                            <option value="{{ account.account_number }}|{{ account.bank_name }}" {% if account.account_number in scraping_account_numbers %}disabled{% endif %}>
                                 {{ account.bank_name }} - {{ account.account_number }}
                                 {% if account.account_number in scraping_account_numbers %}(Scraping in progress...){% endif %}
                             </option>

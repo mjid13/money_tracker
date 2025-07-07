@@ -21,8 +21,9 @@ from threading import Lock
 
 from money_tracker.services.parser_service import TransactionParser
 from money_tracker.services.email_service import EmailService
+from money_tracker.services.counterparty_service import CounterpartyService
 from money_tracker.models.database import Database
-from money_tracker.models.models import TransactionRepository, User, Account, EmailConfiguration, EmailMetadata, Transaction
+from money_tracker.models.models import TransactionRepository, User, Account, EmailConfiguration, Transaction, Category, CategoryMapping, CategoryType
 from money_tracker.config import settings
 
 # Setup logging
@@ -47,6 +48,7 @@ parser = TransactionParser()
 db = Database()
 db.connect()
 db.create_tables()
+counterparty_service = CounterpartyService()
 
 # Task manager for tracking email fetching tasks
 email_tasks = {}
@@ -56,7 +58,7 @@ email_tasks_lock = Lock()
 # Format: {account_number: {'user_id': user_id, 'task_id': task_id, 'start_time': time.time()}}
 scraping_accounts = {}
 
-def process_emails_task(task_id, user_id, account_number, folder, unread_only, save_to_db, preserve_balance):
+def process_emails_task(task_id, user_id, account_number, bank_name, folder, unread_only, save_to_db, preserve_balance):
     """Background task for processing emails."""
     db_session = db.get_session()
     try:
@@ -147,19 +149,31 @@ def process_emails_task(task_id, user_id, account_number, folder, unread_only, s
                 with email_tasks_lock:
                     email_tasks[task_id]['progress'] = progress
 
-            # Save email metadata
-            email_metadata = TransactionRepository.create_email_metadata(db_session, {
-                'user_id': user_id,
-                'id': email_data.get('id'),
-                'subject': email_data.get('subject', ''),
-                'from': email_data.get('from', ''),
-                'date': email_data.get('date', ''),
-                'body': email_data.get('body', ''),
-                'processed': True
-            })
-
             # Parse email to extract transaction data
-            transaction_data = parser.parse_email(email_data)
+            transaction_data = parser.parse_email(email_data, bank_name)
+
+            # Save email metadata
+            if transaction_data:
+                email_metadata = TransactionRepository.create_email_metadata(db_session, {
+                    'user_id': user_id,
+                    'id': email_data.get('id'),
+                    'subject': email_data.get('subject', ''),
+                    'from': email_data.get('from', ''),
+                    'date': email_data.get('date', ''),
+                    'body': email_data.get('body', ''),
+                    'cleaned_body': transaction_data.get('cleaned_email_content', ''),  # Save the cleaned email content
+                    'processed': True
+                })
+            else:
+                email_metadata = TransactionRepository.create_email_metadata(db_session, {
+                    'user_id': user_id,
+                    'id': email_data.get('id'),
+                    'subject': email_data.get('subject', ''),
+                    'from': email_data.get('from', ''),
+                    'date': email_data.get('date', ''),
+                    'body': email_data.get('body', ''),
+                    'processed': True
+                })
 
             if transaction_data:
                 # Check if the account is different
@@ -172,9 +186,6 @@ def process_emails_task(task_id, user_id, account_number, folder, unread_only, s
 
                 if email_metadata:
                     transaction_data['email_metadata_id'] = email_metadata.id
-
-                # Store cleaned email content for hover display
-                transaction_data['cleaned_email_content'] = email_data.get('body', '')
 
                 parsed_emails.append({
                     'email': email_data,
@@ -873,7 +884,7 @@ def account_details(account_number):
             return redirect(url_for('accounts'))
 
         transactions_history = TransactionRepository.get_account_transaction_history(
-            db_session, user_id, account_number, page=page, per_page=200
+            db_session, user_id, account_number, page=page, per_page=per_page
         )
         summary = TransactionRepository.get_account_summary(db_session, user_id, account_number)
 
@@ -974,7 +985,8 @@ def delete_transaction(transaction_id):
 def fetch_emails():
     """Start asynchronous email fetching process."""
     user_id = session.get('user_id')
-    account_number = request.form.get('account_number')
+    account_number = request.form.get('account_number', '').split('|')[0] if '|' in request.form.get('account_number', '') else ''
+    bank_name = request.form.get('account_number', '').split('|')[1] if '|' in request.form.get('account_number', '') else ''
 
     if not account_number:
         flash('Please select an account', 'error')
@@ -1026,7 +1038,7 @@ def fetch_emails():
         try:
             thread = threading.Thread(
                 target=process_emails_task,
-                args=(task_id, user_id, account_number, folder, unread_only, save_to_db, preserve_balance)
+                args=(task_id, user_id, account_number, bank_name, folder, unread_only, save_to_db, preserve_balance)
             )
             thread.daemon = True
             thread.start()
@@ -1213,6 +1225,221 @@ def after_request(response):
     return response
 
 # Error handlers
+@app.route('/categories')
+@login_required
+def categories():
+    """List all categories."""
+    user_id = session.get('user_id')
+
+    try:
+        # Get all categories for this user
+        categories = counterparty_service.get_categories(user_id)
+        return render_template('categories.html', categories=categories)
+    except Exception as e:
+        logger.error(f"Error loading categories: {str(e)}")
+        flash('Error loading categories. Please try again.', 'error')
+        return redirect(url_for('dashboard'))
+
+@app.route('/categories/add', methods=['GET', 'POST'])
+@login_required
+def add_category():
+    """Add a new category."""
+    user_id = session.get('user_id')
+
+    if request.method == 'POST':
+        name = request.form.get('name')
+        description = request.form.get('description')
+
+        if not name:
+            flash('Category name is required', 'error')
+            return render_template('add_category.html')
+
+        category = counterparty_service.create_category(user_id, name, description)
+        if category:
+            flash('Category added successfully', 'success')
+            return redirect(url_for('categories'))
+        else:
+            flash('Error adding category', 'error')
+            return render_template('add_category.html')
+
+    return render_template('add_category.html')
+
+@app.route('/categories/<int:category_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_category(category_id):
+    """Edit a category."""
+    user_id = session.get('user_id')
+
+    # Get the category
+    category = counterparty_service.get_category(category_id, user_id)
+    if not category:
+        flash('Category not found', 'error')
+        return redirect(url_for('categories'))
+
+    if request.method == 'POST':
+        name = request.form.get('name')
+        description = request.form.get('description')
+
+        if not name:
+            flash('Category name is required', 'error')
+            return render_template('edit_category.html', category=category)
+
+        result = counterparty_service.update_category(category_id, user_id, name, description)
+        if result:
+            flash('Category updated successfully', 'success')
+            return redirect(url_for('categories'))
+        else:
+            flash('Error updating category', 'error')
+            return render_template('edit_category.html', category=category)
+
+    return render_template('edit_category.html', category=category)
+
+@app.route('/categories/<int:category_id>/delete', methods=['POST'])
+@login_required
+def delete_category(category_id):
+    """Delete a category."""
+    user_id = session.get('user_id')
+
+    result = counterparty_service.delete_category(category_id, user_id)
+    if result:
+        flash('Category deleted successfully', 'success')
+    else:
+        flash('Error deleting category', 'error')
+
+    return redirect(url_for('categories'))
+
+@app.route('/categories/<int:category_id>/mappings')
+@login_required
+def category_mappings(category_id):
+    """List all mappings for a category."""
+    user_id = session.get('user_id')
+
+    # Get the category
+    category = counterparty_service.get_category(category_id, user_id)
+    if not category:
+        flash('Category not found', 'error')
+        return redirect(url_for('categories'))
+
+    # Get the mappings
+    mappings = counterparty_service.get_category_mappings(category_id, user_id)
+
+    return render_template('category_mappings.html', category=category, mappings=mappings)
+
+@app.route('/categories/<int:category_id>/mappings/add', methods=['GET', 'POST'])
+@login_required
+def add_category_mapping(category_id):
+    """Add a new category mapping."""
+    user_id = session.get('user_id')
+
+    # Get the category
+    category = counterparty_service.get_category(category_id, user_id)
+    if not category:
+        flash('Category not found', 'error')
+        return redirect(url_for('categories'))
+
+    if request.method == 'POST':
+        mapping_type = request.form.get('mapping_type')
+        pattern = request.form.get('pattern')
+
+        if not mapping_type or not pattern:
+            flash('Mapping type and pattern are required', 'error')
+            return render_template('add_category_mapping.html', category=category)
+
+        # Convert mapping_type string to enum
+        try:
+            mapping_type_enum = CategoryType[mapping_type]
+        except KeyError:
+            flash('Invalid mapping type', 'error')
+            return render_template('add_category_mapping.html', category=category)
+
+        mapping = counterparty_service.create_category_mapping(category_id, user_id, mapping_type_enum, pattern)
+        if mapping:
+            flash('Category mapping added successfully', 'success')
+            return redirect(url_for('category_mappings', category_id=category_id))
+        else:
+            flash('Error adding category mapping', 'error')
+            return render_template('add_category_mapping.html', category=category)
+
+    return render_template('add_category_mapping.html', category=category)
+
+@app.route('/categories/mappings/<int:mapping_id>/delete', methods=['POST'])
+@login_required
+def delete_category_mapping(mapping_id):
+    """Delete a category mapping."""
+    user_id = session.get('user_id')
+
+    # Get the category_id from the form
+    category_id = request.form.get('category_id')
+    if not category_id:
+        flash('Category ID is required', 'error')
+        return redirect(url_for('categories'))
+
+    result = counterparty_service.delete_category_mapping(mapping_id, user_id)
+    if result:
+        flash('Category mapping deleted successfully', 'success')
+    else:
+        flash('Error deleting category mapping', 'error')
+
+    return redirect(url_for('category_mappings', category_id=category_id))
+
+@app.route('/counterparties')
+@login_required
+def counterparties():
+    """List all unique counterparties."""
+    user_id = session.get('user_id')
+
+    try:
+        # Get all unique counterparties for this user
+        counterparties = counterparty_service.get_unique_counterparties(user_id)
+
+        # Get all categories for this user (for the categorization form)
+        categories = counterparty_service.get_categories(user_id)
+
+        return render_template('counterparties.html', counterparties=counterparties, categories=categories)
+    except Exception as e:
+        logger.error(f"Error loading counterparties: {str(e)}")
+        flash('Error loading counterparties. Please try again.', 'error')
+        return redirect(url_for('dashboard'))
+
+@app.route('/counterparties/categorize', methods=['POST'])
+@login_required
+def categorize_counterparty():
+    """Categorize a counterparty."""
+    user_id = session.get('user_id')
+
+    counterparty_name = request.form.get('counterparty_name')
+    description = request.form.get('description')
+    category_id = request.form.get('category_id')
+
+    if not counterparty_name or not category_id:
+        flash('Counterparty name and category are required', 'error')
+        return redirect(url_for('counterparties'))
+
+    try:
+        category_id = int(category_id)
+    except ValueError:
+        flash('Invalid category ID', 'error')
+        return redirect(url_for('counterparties'))
+
+    result = counterparty_service.categorize_counterparty(user_id, counterparty_name, description, category_id)
+    if result:
+        flash('Counterparty categorized successfully', 'success')
+    else:
+        flash('Error categorizing counterparty', 'error')
+
+    return redirect(url_for('counterparties'))
+
+@app.route('/auto-categorize')
+@login_required
+def auto_categorize():
+    """Auto-categorize all uncategorized transactions."""
+    user_id = session.get('user_id')
+
+    count = counterparty_service.auto_categorize_all_transactions(user_id)
+    flash(f'Auto-categorized {count} transactions', 'success')
+
+    return redirect(url_for('dashboard'))
+
 @app.errorhandler(404)
 def not_found_error(error):
     return render_template('errors/404.html'), 404

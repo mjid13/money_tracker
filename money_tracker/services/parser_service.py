@@ -163,6 +163,7 @@ class TransactionParser:
             "type": None,
             "from": None,
             "to": None,
+            "currency": None,
         }
 
         # Account number (xxxx + digits)
@@ -186,11 +187,12 @@ class TransactionParser:
         if type_match:
             data['transaction_type'] = type_match.group(1).lower()
 
-        # Amount: OMR with decimal or integer (with optional commas)
-        amount_re = re.compile(r'OMR\s*([\d,]+\.\d+|[\d,]+)', re.IGNORECASE)
+        # Amount and currency: Currency code with decimal or integer (with optional commas)
+        amount_re = re.compile(r'([A-Z]{3})\s*([\d,]+\.\d+|[\d,]+)', re.IGNORECASE)
         amount_match = amount_re.search(email_text)
         if amount_match:
-            data['amount'] = amount_match.group(1).replace(',', '')
+            data['currency'] = amount_match.group(1).upper()
+            data['amount'] = amount_match.group(2).replace(',', '')
 
         # Date (two formats): "value date dd/mm/yy" or "Date/Time : 22 JUN 25 20:29"
         date_re1 = re.compile(r'value date\s+(\d{2}/\d{2}/\d{2})', re.IGNORECASE)
@@ -241,12 +243,13 @@ class TransactionParser:
 
         return data
 
-    def parse_email(self, email_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def parse_email(self, email_data: Dict[str, Any], bank_name: str = 'Bank Muscat') -> Optional[Dict[str, Any]]:
         """
         Parse an email and extract transaction data using the new approach.
 
         Args:
             email_data (Dict[str, Any]): Email data dictionary.
+            bank_name (str, optional): Name of the bank. Defaults to 'Bank Muscat'.
 
         Returns:
             Optional[Dict[str, Any]]: Extracted transaction data or None if parsing fails.
@@ -265,10 +268,11 @@ class TransactionParser:
 
             # Convert to the format expected by the rest of the system
             transaction_data = {
-                'bank_name': 'Bank Muscat', # TODO: Make this dynamic from the user input
+                'bank_name': bank_name,
                 'email_id': email_data.get('id'),
                 'email_date': email_data.get('date'),
-                'currency': 'OMR' # TODO: Try to figure a way to make this dynamic
+                'currency': extracted_data.get('currency', 'OMR'),
+                'cleaned_email_content': clean_text  # Include the cleaned email content
             }
 
             # Map the extracted data to transaction_data
