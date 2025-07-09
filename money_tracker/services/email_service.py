@@ -8,6 +8,9 @@ from email.header import decode_header
 import logging
 from typing import List, Dict, Any, Optional
 import re
+import socket
+import ssl
+import time
 
 from money_tracker.config import settings
 
@@ -18,7 +21,7 @@ logger = logging.getLogger(__name__)
 class EmailService:
     """Service for connecting to email accounts and retrieving bank emails."""
 
-    def __init__(self, host=None, port=None, username=None, password=None, use_ssl=None, 
+    def __init__(self, host=None, port=None, username=None, password=None, use_ssl=None,
                  bank_email_addresses=None, bank_email_subjects=None, user_id=None, user_accounts=None):
         self.host = host
         self.port = port
@@ -30,30 +33,57 @@ class EmailService:
         self.user_id = user_id
         self.user_accounts = user_accounts or []  # List of user's bank accounts
         self.connection = None
-        logger.debug("Initialized EmailService with host=%s, port=%s, username=%s, use_ssl=%s", 
+        self.max_retries = 3
+        self.retry_delay = 2  # seconds
+        logger.debug("Initialized EmailService with host=%s, port=%s, username=%s, use_ssl=%s",
                      self.host, self.port, self.username, self.use_ssl)
 
     def connect(self) -> bool:
         """
-        Connect to the email server.
+        Connect to the email server with retry logic.
 
         Returns:
             bool: True if connection is successful, False otherwise.
         """
-        try:
-            logger.debug("Attempting to connect to server %s:%s with SSL=%s", self.host, self.port, self.use_ssl)
-            if self.use_ssl:
-                self.connection = imaplib.IMAP4_SSL(self.host, self.port)
-            else:
-                self.connection = imaplib.IMAP4(self.host, self.port)
+        for attempt in range(self.max_retries):
+            try:
+                logger.debug("Attempting to connect to server %s:%s with SSL=%s (attempt %d/%d)",
+                             self.host, self.port, self.use_ssl, attempt + 1, self.max_retries)
 
-            self.connection.login(self.username, self.password)
-            logger.info(f"Successfully connected to {self.host}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to connect to {self.host}: {str(e)}")
-            logger.debug("Exception in connect: ", exc_info=True)
-            return False
+                if self.use_ssl:
+                    # Create SSL context with more flexible settings
+                    context = ssl.create_default_context()
+                    # Allow older TLS versions if needed
+                    context.minimum_version = ssl.TLSVersion.TLSv1_2
+                    # Set timeout for socket operations
+                    self.connection = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=context)
+                    # Set socket timeout
+                    self.connection.sock.settimeout(60)
+                else:
+                    self.connection = imaplib.IMAP4(self.host, self.port)
+                    # Set socket timeout
+                    self.connection.sock.settimeout(60)
+
+                self.connection.login(self.username, self.password)
+                logger.info(f"Successfully connected to {self.host}")
+                return True
+
+            except (socket.error, ssl.SSLError, imaplib.IMAP4.error) as e:
+                logger.warning(f"Connection attempt {attempt + 1} failed: {str(e)}")
+                if attempt < self.max_retries - 1:
+                    logger.info(f"Retrying in {self.retry_delay} seconds...")
+                    time.sleep(self.retry_delay)
+                    # Increase delay for next retry
+                    self.retry_delay *= 2
+                else:
+                    logger.error(f"All connection attempts failed for {self.host}")
+
+            except Exception as e:
+                logger.error(f"Unexpected error during connection: {str(e)}")
+                logger.debug("Exception in connect: ", exc_info=True)
+                break
+
+        return False
 
     def disconnect(self) -> None:
         """Disconnect from the email server."""
@@ -68,6 +98,25 @@ class EmailService:
             finally:
                 self.connection = None
 
+    def _reconnect_if_needed(self) -> bool:
+        """
+        Check if connection is still alive and reconnect if necessary.
+
+        Returns:
+            bool: True if connection is available, False otherwise.
+        """
+        if not self.connection:
+            return self.connect()
+
+        try:
+            # Try a simple NOOP command to check if connection is alive
+            self.connection.noop()
+            return True
+        except Exception as e:
+            logger.warning(f"Connection seems to be dead: {str(e)}")
+            self.connection = None
+            return self.connect()
+
     def get_bank_emails(self, folder: str = "INBOX", unread_only: bool = True) -> List[Dict[str, Any]]:
         """
         Retrieve bank emails from the specified folder.
@@ -79,11 +128,9 @@ class EmailService:
         Returns:
             List[Dict[str, Any]]: List of email data dictionaries.
         """
-        if not self.connection:
-            logger.debug("No existing email connection. Attempting to connect.")
-            if not self.connect():
-                logger.debug("Connection attempt failed, returning empty email list.")
-                return []
+        if not self._reconnect_if_needed():
+            logger.debug("Connection attempt failed, returning empty email list.")
+            return []
 
         try:
             logger.debug("Selecting folder '%s'", folder)
@@ -125,10 +172,8 @@ class EmailService:
             for email_id in email_ids:
                 logger.debug("Fetching email ID: %s", email_id)
                 email_data = self._fetch_email(email_id)
-                # no need to check if email_data is None here, as _fetch_email handles errors
-                # if email_data and self._is_bank_email(email_data):
-                #     logger.debug("Fetched email data for: %s", email_id)
-                emails.append(email_data)
+                if email_data:
+                    emails.append(email_data)
 
             logger.info(f"Retrieved {len(emails)} bank emails")
             return emails
@@ -139,7 +184,7 @@ class EmailService:
 
     def _fetch_email(self, email_id: bytes) -> Optional[Dict[str, Any]]:
         """
-        Fetch and parse an email by ID.
+        Fetch and parse an email by ID with retry logic.
 
         Args:
             email_id (bytes): Email ID to fetch.
@@ -147,59 +192,81 @@ class EmailService:
         Returns:
             Optional[Dict[str, Any]]: Email data dictionary or None if error.
         """
-        try:
-            logger.debug("Fetching email using ID: %s", email_id)
-            status, data = self.connection.fetch(email_id, '(RFC822)')
-            logger.debug("Fetch status: %s, data length: %d", status, len(data) if data else 0)
-            if status != 'OK':
-                logger.error(f"Failed to fetch email {email_id}")
-                return None
+        for attempt in range(self.max_retries):
+            try:
+                logger.debug("Fetching email using ID: %s (attempt %d/%d)",
+                             email_id, attempt + 1, self.max_retries)
 
-            raw_email = data[0][1]
-            msg = email.message_from_bytes(raw_email)
+                # Check connection before fetching
+                if not self._reconnect_if_needed():
+                    logger.error("Cannot establish connection for email fetch")
+                    return None
 
-            subject = self._decode_header(msg['Subject'])
-            from_addr = self._decode_header(msg['From'])
-            date = msg['Date']
+                status, data = self.connection.fetch(email_id, '(RFC822)')
+                logger.debug("Fetch status: %s, data length: %d", status, len(data) if data else 0)
 
-            body = ""
-            if msg.is_multipart():
-                for part in msg.walk():
-                    content_type = part.get_content_type()
-                    content_disposition = str(part.get("Content-Disposition"))
-                    logger.debug("Email part content_type: %s, content_disposition: %s", content_type, content_disposition)
-                    if "attachment" in content_disposition:
-                        logger.debug("Skipping attachment part")
-                        continue
+                if status != 'OK':
+                    logger.error(f"Failed to fetch email {email_id}")
+                    return None
 
-                    # Get text content
-                    if content_type == "text/plain":
-                        try:
-                            body_part = part.get_payload(decode=True).decode()
-                            body += body_part
-                        except Exception as e:
-                            logger.warning(f"Error decoding email part: {str(e)}")
-                            logger.debug("Exception in decoding multipart: ", exc_info=True)
-            else:
-                # Not multipart - get payload directly
-                try:
-                    body = msg.get_payload(decode=True).decode()
-                except Exception as e:
-                    logger.warning(f"Error decoding email body: {str(e)}")
-                    logger.debug("Exception in non-multipart decoding: ", exc_info=True)
+                raw_email = data[0][1]
+                msg = email.message_from_bytes(raw_email)
 
-            return {
-                'id': email_id.decode(),
-                'subject': subject,
-                'from': from_addr,
-                'date': date,
-                'body': body,
-                'raw_message': msg
-            }
-        except Exception as e:
-            logger.error(f"Error processing email {email_id}: {str(e)}")
-            logger.debug("Exception in _fetch_email: ", exc_info=True)
-            return None
+                subject = self._decode_header(msg['Subject'])
+                from_addr = self._decode_header(msg['From'])
+                date = msg['Date']
+
+                body = ""
+                if msg.is_multipart():
+                    for part in msg.walk():
+                        content_type = part.get_content_type()
+                        content_disposition = str(part.get("Content-Disposition"))
+                        logger.debug("Email part content_type: %s, content_disposition: %s", content_type, content_disposition)
+                        if "attachment" in content_disposition:
+                            logger.debug("Skipping attachment part")
+                            continue
+
+                        # Get text content
+                        if content_type == "text/plain":
+                            try:
+                                body_part = part.get_payload(decode=True).decode()
+                                body += body_part
+                            except Exception as e:
+                                logger.warning(f"Error decoding email part: {str(e)}")
+                                logger.debug("Exception in decoding multipart: ", exc_info=True)
+                else:
+                    # Not multipart - get payload directly
+                    try:
+                        body = msg.get_payload(decode=True).decode()
+                    except Exception as e:
+                        logger.warning(f"Error decoding email body: {str(e)}")
+                        logger.debug("Exception in non-multipart decoding: ", exc_info=True)
+
+                return {
+                    'id': email_id.decode(),
+                    'subject': subject,
+                    'from': from_addr,
+                    'date': date,
+                    'body': body,
+                    'raw_message': msg
+                }
+
+            except (socket.error, ssl.SSLError, imaplib.IMAP4.abort) as e:
+                logger.warning(f"Network error fetching email {email_id} (attempt {attempt + 1}): {str(e)}")
+                if attempt < self.max_retries - 1:
+                    logger.info(f"Retrying email fetch in {self.retry_delay} seconds...")
+                    time.sleep(self.retry_delay)
+                    # Reset connection
+                    self.connection = None
+                else:
+                    logger.error(f"All fetch attempts failed for email {email_id}")
+
+            except Exception as e:
+                logger.error(f"Unexpected error processing email {email_id}: {str(e)}")
+                logger.debug("Exception in _fetch_email: ", exc_info=True)
+                break
+
+        return None
 
     def _is_bank_email(self, email_data: Dict[str, Any]) -> bool:
         """
