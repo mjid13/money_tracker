@@ -128,6 +128,7 @@
                                     <th>Type</th>
                                     <th>Amount</th>
                                     <th>Description</th>
+                                    <th>Category</th>
                                     <th>Sender/Receiver</th>
                                     <th></th>
                                 </tr>
@@ -178,6 +179,13 @@
 
                                                 {{ transaction.transaction_details or 'No description' }}
                                             </div>
+                                        </td>
+                                        <td>
+                                            {% if transaction.category %}
+                                                <span class="badge bg-info">{{ transaction.category.name }}</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Uncategorized</span>
+                                            {% endif %}
                                         </td>
                                         {% if transaction.transaction_type == 'INCOME' %}
                                             <td class="text-success">{{ transaction.from_party or 'N/A' }}</td>

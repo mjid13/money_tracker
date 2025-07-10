@@ -913,16 +913,20 @@ def edit_transaction(transaction_id):
             flash('Transaction not found or you do not have permission to edit it', 'error')
             return redirect(url_for('accounts'))
 
+        # Get all categories for the current user
+        categories = db_session.query(Category.id, Category.name).all()
+
         if request.method == 'POST':
+
             # Update transaction data
             transaction_data = {
                 'amount': float(request.form.get('amount', 0.0)),
                 'transaction_type': request.form.get('transaction_type', 'unknown'),
                 'date_time': datetime.strptime(request.form.get('date_time'), '%Y-%m-%dT%H:%M'),
                 'description': request.form.get('description', ''),
-                'transaction_details': request.form.get('transaction_details', '')
+                'transaction_details': request.form.get('transaction_details', ''),
+                'category_id': request.form.get('category')
             }
-
             updated_transaction = TransactionRepository.update_transaction(
                 db_session, transaction_id, transaction_data
             )
@@ -933,7 +937,7 @@ def edit_transaction(transaction_id):
             else:
                 flash('Error updating transaction', 'error')
 
-        return render_template('edit_transaction.html', transaction=transaction)
+        return render_template('edit_transaction.html', transaction=transaction, categories=categories)
     except Exception as e:
         logger.error(f"Error editing transaction: {str(e)}")
         flash(f'Error editing transaction: {str(e)}', 'error')

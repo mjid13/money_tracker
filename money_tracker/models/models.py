@@ -1091,11 +1091,11 @@ class TransactionRepository:
             # Get transaction counts and sums by type
             transaction_stats = session.query(
                 func.count(Transaction.id).label('total_count'),
-                func.sum(case([(Transaction.transaction_type == TransactionType.INCOME, Transaction.amount)], else_=0)).label('total_income'),
-                func.sum(case([(Transaction.transaction_type == TransactionType.EXPENSE, Transaction.amount)], else_=0)).label('total_expense'),
-                func.sum(case([(Transaction.transaction_type == TransactionType.TRANSFER, Transaction.amount)], else_=0)).label('total_transfer'),
-                func.count(case([(Transaction.transaction_type == TransactionType.INCOME, 1)], else_=None)).label('income_count'),
-                func.count(case([(Transaction.transaction_type == TransactionType.EXPENSE, 1)], else_=None)).label('expense_count')
+                func.sum(case((Transaction.transaction_type == TransactionType.INCOME, Transaction.amount), else_=0)).label('total_income'),
+                func.sum(case((Transaction.transaction_type == TransactionType.EXPENSE, Transaction.amount), else_=0)).label('total_expense'),
+                func.sum(case((Transaction.transaction_type == TransactionType.TRANSFER, Transaction.amount), else_=0)).label('total_transfer'),
+                func.count(case((Transaction.transaction_type == TransactionType.INCOME, 1), else_=None)).label('income_count'),
+                func.count(case((Transaction.transaction_type == TransactionType.EXPENSE, 1), else_=None)).label('expense_count')
             ).filter(
                 Transaction.account_id == account.id
             ).first()

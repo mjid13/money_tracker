@@ -44,9 +44,9 @@
                                 <div class="form-group">
                                     <label for="transaction_type" class="form-label">Type</label>
                                     <select class="form-select form-select-lg" id="transaction_type" name="transaction_type" required>
-                                        <option value="INCOME" {{ 'selected' if transaction.transaction_type == 'INCOME' }}>Income</option>
-                                        <option value="EXPENSE" {{ 'selected' if transaction.transaction_type == 'EXPENSE' }}>Expense</option>
-                                        <option value="TRANSFER" {{ 'selected' if transaction.transaction_type == 'TRANSFER' }}>Transfer</option>
+                                        <option value="INCOME" {% if (transaction.transaction_type and transaction.transaction_type.name == 'INCOME') or (transaction.transaction_type|string == 'INCOME') %}selected{% endif %}>Income</option>
+                                        <option value="EXPENSE" {% if (transaction.transaction_type and transaction.transaction_type.name == 'EXPENSE') or (transaction.transaction_type|string == 'EXPENSE') %}selected{% endif %}>Expense</option>
+                                        <option value="TRANSFER" {% if (transaction.transaction_type and transaction.transaction_type.name == 'TRANSFER') or (transaction.transaction_type|string == 'TRANSFER') %}selected{% endif %}>Transfer</option>
                                     </select>
                                     <div class="invalid-feedback">Please select a transaction type.</div>
                                 </div>
@@ -64,14 +64,39 @@
                                     <div class="invalid-feedback">Please select a valid date and time.</div>
                                 </div>
                             </div>
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label for="counterparty_name" class="form-label">Counterparty Name</label>
+                                    <input type="text"
+                                           class="form-control"
+                                           id="counterparty_name"
+                                           name="counterparty_name"
+                                           value="{{ transaction.counterparty_name or transaction.description or '' }}"
+                                           maxlength="200"
+                                           placeholder="Enter counterparty name">
+                                    <div class="form-text">The name of the person or entity involved in this transaction</div>
+                                </div>
+                            </div>
+
 
                             <div class="col-md-12">
                                 <div class="form-group">
-                                    <label for="description" class="form-label">Description</label>
-                                    <textarea class="form-control"
-                                              id="description"
-                                              name="description"
-                                              rows="3">{{ transaction.description or '' }}</textarea>
+                                    <label for="category" class="form-label">Category</label>
+                                    <div class="input-group">
+                                        <select class="form-select form-select-lg" id="category" name="category" data-bs-toggle="tooltip" >
+                                            <option value="">-- Select Category --</option>
+                                            {% for category_id, category_name in categories %}
+                                            <option value="{{ category_id }}"
+                                                    {% if transaction.category and transaction.category.id|string == category_id|string %}selected{% endif %}>
+                                                {{ category_name }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                        <a href="{{ url_for('add_category') }}" class="btn btn-outline-primary" data-bs-toggle="tooltip" title="Add new category">
+                                            <i class="bi bi-plus-lg"></i> New Category
+                                        </a>
+                                    </div>
+                                    <div class="form-text">Select a category or create a new one</div>
                                 </div>
                             </div>
 
@@ -88,7 +113,7 @@
 
                             {% if transaction.email_metadata %}
                             <div class="col-12">
-                                <div class="alert alert-info d-flex align-items-center">
+                                <div class="alert alert-info d-flex align-items-center alert-permanent">
                                     <i class="bi bi-info-circle-fill me-2"></i>
                                     <div>
                                         This transaction was created from an email on {{ transaction.email_metadata.date }}.
