@@ -920,6 +920,7 @@ def edit_transaction(transaction_id):
 
             # Update transaction data
             transaction_data = {
+                "counterparty_name": request.form.get('counterparty_name', ''),
                 'amount': float(request.form.get('amount', 0.0)),
                 'transaction_type': request.form.get('transaction_type', 'unknown'),
                 'date_time': datetime.strptime(request.form.get('date_time'), '%Y-%m-%dT%H:%M'),
