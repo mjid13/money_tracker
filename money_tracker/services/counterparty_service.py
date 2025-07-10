@@ -183,10 +183,16 @@ class CounterpartyService:
                     # Still return True because we created the mappings successfully
                     return True
 
-                # Update all matching transactions
-                session.query(Transaction).join(Account).filter(
+                # Get transaction IDs that need to be updated
+                transaction_ids = [t.id for t in session.query(Transaction.id).join(Account).filter(
                     *filter_conditions
-                ).update({Transaction.category_id: category_id}, synchronize_session=False)
+                ).all()]
+
+                # Update transactions without using join
+                if transaction_ids:
+                    session.query(Transaction).filter(
+                        Transaction.id.in_(transaction_ids)
+                    ).update({Transaction.category_id: category_id}, synchronize_session=False)
 
                 session.commit()
                 logger.info(f"Categorized {transaction_count} transactions with counterparty {counterparty_name} or description {description} as {category.name}")

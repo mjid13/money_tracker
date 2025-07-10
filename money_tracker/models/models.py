@@ -407,9 +407,16 @@ class CategoryRepository:
                 return False
 
             # Remove category from transactions
-            session.query(Transaction).filter(
+            # First, get transaction IDs to update
+            transaction_ids = [row.id for row in session.query(Transaction.id).filter(
                 Transaction.category_id == category_id
-            ).update({Transaction.category_id: None})
+            ).all()]
+
+            # Then update using a simple query
+            if transaction_ids:
+                session.query(Transaction).filter(
+                    Transaction.id.in_(transaction_ids)
+                ).update({Transaction.category_id: None}, synchronize_session=False)
 
             session.delete(category)
             session.commit()
@@ -483,15 +490,29 @@ class CategoryRepository:
 
             # Update transactions that match this pattern
             if mapping_type == CategoryType.COUNTERPARTY:
-                session.query(Transaction).join(Account).filter(
+                # Get transaction IDs that need to be updated
+                transaction_ids = [t.id for t in session.query(Transaction.id).join(Account).filter(
                     Account.user_id == user_id,
                     Transaction.counterparty_name == pattern
-                ).update({Transaction.category_id: category_id}, synchronize_session=False)
+                ).all()]
+
+                # Update transactions without using join
+                if transaction_ids:
+                    session.query(Transaction).filter(
+                        Transaction.id.in_(transaction_ids)
+                    ).update({Transaction.category_id: category_id}, synchronize_session=False)
             else:  # DESCRIPTION
-                session.query(Transaction).join(Account).filter(
+                # Get transaction IDs that need to be updated
+                transaction_ids = [t.id for t in session.query(Transaction.id).join(Account).filter(
                     Account.user_id == user_id,
                     Transaction.description == pattern
-                ).update({Transaction.category_id: category_id}, synchronize_session=False)
+                ).all()]
+
+                # Update transactions without using join
+                if transaction_ids:
+                    session.query(Transaction).filter(
+                        Transaction.id.in_(transaction_ids)
+                    ).update({Transaction.category_id: category_id}, synchronize_session=False)
 
             session.commit()
             return mapping

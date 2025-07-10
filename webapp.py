@@ -919,22 +919,56 @@ def edit_transaction(transaction_id):
         if request.method == 'POST':
 
             # Update transaction data
+
+            counterparty_name = request.form.get('counterparty_name', '').strip()
+            logger.info(f'Counterparty name: {counterparty_name}')
+            category_id = request.form.get('category')
+            category_update_scope = request.form.get('category_update_scope', 'single')
+
             transaction_data = {
-                "counterparty_name": request.form.get('counterparty_name', ''),
+                "counterparty_name": counterparty_name,
                 'amount': float(request.form.get('amount', 0.0)),
                 'transaction_type': request.form.get('transaction_type', 'unknown'),
                 'date_time': datetime.strptime(request.form.get('date_time'), '%Y-%m-%dT%H:%M'),
                 'description': request.form.get('description', ''),
                 'transaction_details': request.form.get('transaction_details', ''),
-                'category_id': request.form.get('category')
+                'category_id': category_id
             }
             updated_transaction = TransactionRepository.update_transaction(
                 db_session, transaction_id, transaction_data
             )
 
             if updated_transaction:
-                flash('Transaction updated successfully', 'success')
-                return redirect(url_for('account_details', account_number=transaction.account.account_number))
+                if (category_update_scope == 'all_counterparty' and
+                        counterparty_name and
+                        category_id):
+
+                    # Update all transactions from this counterparty
+                    try:
+                        success = counterparty_service.categorize_counterparty(
+                            user_id=user_id,
+                            counterparty_name=counterparty_name,
+                            description=None,  # Only match by counterparty name
+                            category_id=int(category_id)
+                        )
+
+                        if success:
+                            flash(
+                                f'Transaction updated successfully. All transactions from "{counterparty_name}" have been categorized.',
+                                'success')
+                        else:
+                            flash(
+                                'Transaction updated successfully, but failed to update other transactions from this counterparty.',
+                                'warning')
+                    except Exception as e:
+                        logger.error(f"Error updating counterparty transactions: {str(e)}")
+                        flash(
+                            'Transaction updated successfully, but failed to update other transactions from this counterparty.',
+                            'warning')
+                else:
+                    flash('Transaction updated successfully', 'success')
+                    return redirect(url_for('account_details', account_number=transaction.account.account_number))
+
             else:
                 flash('Error updating transaction', 'error')
 

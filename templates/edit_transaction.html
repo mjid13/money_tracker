@@ -99,6 +99,27 @@
                                     <div class="form-text">Select a category or create a new one</div>
                                 </div>
                             </div>
+                            <div class="col-md-12" id="category-update-options" style="display: none;">
+                                <div class="form-group">
+                                    <label class="form-label">Category Update Options</label>
+                                    <div class="mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="category_update_scope" id="update_single" value="single" checked>
+                                            <label class="form-check-label" for="update_single">
+                                                Update only this transaction
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="category_update_scope" id="update_all_counterparty" value="all_counterparty">
+                                            <label class="form-check-label" for="update_all_counterparty">
+                                                Update all transactions from this counterparty
+                                                <span class="text-muted" id="counterparty-count"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="form-text">Choose whether to update the category for this transaction only or for all transactions from the same counterparty</div>
+                                </div>
+                            </div>
 
                             <div class="col-md-12">
                                 <div class="form-group">
@@ -218,6 +239,33 @@ document.getElementById('transaction_type').addEventListener('change', function(
         amountInput.classList.add('text-success')
     } else if (this.value === 'EXPENSE') {
         amountInput.classList.add('text-danger')
+    }
+})
+
+// Show/hide category update options when category is changed
+document.getElementById('category').addEventListener('change', function() {
+    const categoryUpdateOptions = document.getElementById('category-update-options')
+    const counterpartyName = document.getElementById('counterparty_name').value.trim()
+
+    if (this.value && counterpartyName) {
+        categoryUpdateOptions.style.display = 'block'
+        updateCounterpartyCount(counterpartyName)
+    } else {
+        categoryUpdateOptions.style.display = 'none'
+    }
+})
+
+// show/hide options when counterparty name changes
+document.getElementById('counterparty_name').addEventListener('input', function() {
+    const categorySelect = document.getElementById('category')
+    const categoryUpdateOptions = document.getElementById('category-update-options')
+    const counterpartyName = this.value.trim()
+
+    if (categorySelect.value && counterpartyName) {
+        categoryUpdateOptions.style.display = 'block'
+        updateCounterpartyCount(counterpartyName)
+    } else {
+        categoryUpdateOptions.style.display = 'none'
     }
 })
 
