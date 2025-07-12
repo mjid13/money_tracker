@@ -59,7 +59,7 @@
                                            class="form-control form-control-lg"
                                            id="date_time"
                                            name="date_time"
-                                           value="{{ transaction.date_time.strftime('%Y-%m-%dT%H:%M') }}"
+                                           value="{% if transaction.date_time %}{{ transaction.date_time.strftime('%Y-%m-%dT%H:%M') }}{% endif %}"
                                            required>
                                     <div class="invalid-feedback">Please select a valid date and time.</div>
                                 </div>

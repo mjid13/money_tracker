@@ -20,7 +20,7 @@
                             <div>
                                 <span class="badge bg-primary-subtle text-primary mb-2">{{ account.bank_name }}</span>
                                 <h2 class="h3 mb-1">•••• {{ account.account_number[-4:] }}</h2>
-                                <p class="text-body-secondary mb-3">Last updated: {{ account.updated_at.strftime('%b %d, %Y at %H:%M') }}</p>
+                                <p class="text-body-secondary mb-3">Last updated: {% if account.updated_at %}{{ account.updated_at.strftime('%b %d, %Y at %H:%M') }}{% else %}N/A{% endif %}</p>
 
                                 <div class="balance-section">
                                     <h3 class="h4 mb-0 d-flex align-items-center">
