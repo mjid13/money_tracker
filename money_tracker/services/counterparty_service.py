@@ -70,7 +70,7 @@ class CounterpartyService:
                         Account.user_id == user_id,
                         Transaction.counterparty_name == counterparty_name
                     ).order_by(
-                        Transaction.date_time.desc()
+                        Transaction.value_date.desc()
                     ).first()
 
                     if latest_transaction:
@@ -81,7 +81,7 @@ class CounterpartyService:
                             'transaction_details': transaction.transaction_details,
                             'category_name': latest_transaction.category_name,
                             'category_id': latest_transaction.category_id,
-                            'last_transaction_date': transaction.date_time
+                            'last_transaction_date': transaction.value_date
                         })
 
                 # Sort by counterparty name

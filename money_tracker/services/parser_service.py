@@ -239,16 +239,23 @@ class TransactionParser:
         # Description: "Description : <text>"
         desc_re = re.compile(r'Description\s*:\s*(.+)', re.IGNORECASE)
         desc_match = desc_re.search(email_text)
+        description = None
         if desc_match:
-            description= desc_match.group(1).strip()
+            description = desc_match.group(1).strip()
             data['description'] = description
+
+        # Country: "Transaction Country : <text>"
+        country_re = re.compile(r'Transaction Country\s*:\s*(.+)', re.IGNORECASE)
+        country_match = country_re.search(email_text)
+        if country_match:
+            data['country'] = country_match.group(1).strip()
 
         # Counterparty (Sender/Receiver) name
         counterparty_name = self._get_name(email_text)
         if counterparty_name:
             data['counterparty_name'] = counterparty_name
-        else:
-            data['counterparty_name'] = '-'.join(description.split('-')[1:]).strip() if description else None
+        elif description:
+            data['counterparty_name'] = '-'.join(description.split('-')[1:]).strip()
         txn_id_re = re.compile(r'Txn Id\s+(\w+)', re.IGNORECASE)
         txn_id_match = txn_id_re.search(email_text)
         if txn_id_match:
@@ -300,7 +307,7 @@ class TransactionParser:
             transaction_data = {
                 'bank_name': bank_name,
                 'email_id': email_data.get('id'),
-                'email_date': email_data.get('date'),
+                'post_date': email_data.get('date'),  # Renamed from email_date
                 'currency': extracted_data.get('currency', 'OMR'),
                 'cleaned_email_content': clean_text  # Include the cleaned email content
             }
@@ -322,11 +329,14 @@ class TransactionParser:
             else:
                 transaction_data['transaction_type'] = 'unknown'
 
+            if extracted_data.get('country'):
+                transaction_data['country'] = extracted_data['country']
+
             if extracted_data.get('date'):
                 try:
                     transaction_date = self._parse_date(extracted_data['date'])
                     if transaction_date:
-                        transaction_data['date_time'] = transaction_date
+                        transaction_data['value_date'] = transaction_date
                 except Exception as e:
                     logger.warning(f"Failed to parse date '{extracted_data['date']}': {str(e)}")
 
@@ -504,10 +514,13 @@ class TransactionParser:
             logger.warning(f"Invalid amount: {data['amount']}")
             return False
 
-        # Validate date_time if present
-        if 'date_time' in data and data['date_time'] is not None:
-            if not isinstance(data['date_time'], datetime):
-                logger.warning(f"Invalid date_time: {data['date_time']}")
+        # Validate value_date if present
+        if 'value_date' in data and data['value_date'] is not None:
+            if not isinstance(data['value_date'], datetime):
+                logger.warning(f"Invalid value_date: {data['value_date']}")
                 return False
 
         return True
+# tr = TransactionParser()
+# name = tr._get_name("POS 883315-Quality Saving - Al AraMUSC POS251730X3JGQQM8")
+# print(name)

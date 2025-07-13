@@ -924,7 +924,7 @@ def edit_transaction(transaction_id):
                 "counterparty_name": counterparty_name,
                 'amount': float(request.form.get('amount', 0.0)),
                 'transaction_type': request.form.get('transaction_type', 'unknown'),
-                'date_time': datetime.strptime(request.form.get('date_time'), '%Y-%m-%dT%H:%M'),
+                'value_date': datetime.strptime(request.form.get('date_time'), '%Y-%m-%dT%H:%M'),
                 'description': request.form.get('description', ''),
                 'transaction_details': request.form.get('transaction_details', ''),
                 'category_id': category_id

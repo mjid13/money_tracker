@@ -212,7 +212,7 @@ class Transaction(Base):
     transaction_type = Column(Enum(TransactionType), nullable=False)
     amount = Column(Float, nullable=False)
     currency = Column(String(10), default='OMR')
-    date_time = Column(DateTime, nullable=True)
+    value_date = Column(DateTime, nullable=True)
     description = Column(Text)
     transaction_id = Column(String(100))  # Bank's transaction reference
     category_id = Column(Integer, ForeignKey('categories.id'), nullable=True)
@@ -236,7 +236,7 @@ class Transaction(Base):
 
     # Email tracking (deprecated, use email_metadata relationship instead)
     email_id = Column(String(100))
-    email_date = Column(String(200))
+    post_date = Column(String(200))
 
     # Cleaned email content for hover display
     cleaned_email_content = Column(Text)
@@ -249,6 +249,17 @@ class Transaction(Base):
     account = relationship("Account", back_populates="transactions")
     email_metadata = relationship("EmailMetadata", back_populates="transactions")
     category = relationship("Category")
+
+    # Properties for backward compatibility
+    @property
+    def date_time(self):
+        """Backward compatibility property for value_date."""
+        return self.value_date
+
+    @property
+    def email_date(self):
+        """Backward compatibility property for post_date."""
+        return self.post_date
 
 class CategoryRepository:
     """Repository class for category operations."""
@@ -1025,7 +1036,7 @@ class TransactionRepository:
                 transaction_type=transaction_type,
                 amount=transaction_data.get('amount', 0.0),
                 currency=transaction_data.get('currency', 'OMR'),
-                date_time=transaction_data.get('date_time', None),
+                value_date=transaction_data.get('date_time', None),  # Using date_time from input for backward compatibility
                 description=transaction_data.get('description'),
                 transaction_id=transaction_data.get('transaction_id'),
                 bank_name=transaction_data.get('bank_name'),
@@ -1038,7 +1049,7 @@ class TransactionRepository:
                 transaction_details=transaction_data.get('transaction_details'),
                 country=transaction_data.get('country'),
                 email_id=transaction_data.get('email_id'),
-                email_date=transaction_data.get('email_date'),
+                post_date=transaction_data.get('email_date'),  # Using email_date from input for backward compatibility
                 cleaned_email_content=transaction_data.get('cleaned_email_content')
             )
 
@@ -1140,7 +1151,7 @@ class TransactionRepository:
             # Get the most recent transactions for display
             recent_transactions = session.query(Transaction).filter(
                 Transaction.account_id == account.id
-            ).order_by(Transaction.date_time.desc()).limit(10).all()
+            ).order_by(Transaction.value_date.desc()).limit(10).all()
 
             return {
                 'account_number': account.account_number,
@@ -1312,9 +1323,9 @@ class TransactionRepository:
 
             transactions = session.query(Transaction).filter(
                 Transaction.account_id == account.id,
-                Transaction.date_time >= start_date,
-                Transaction.date_time <= end_date
-            ).order_by(Transaction.date_time.desc()).all()
+                Transaction.value_date >= start_date,
+                Transaction.value_date <= end_date
+            ).order_by(Transaction.value_date.desc()).all()
 
             return transactions
 
@@ -1361,7 +1372,7 @@ class TransactionRepository:
             total = query.count()
             pages = (total + per_page - 1) // per_page
 
-            transactions = query.order_by(Transaction.date_time.desc()) \
+            transactions = query.order_by(Transaction.value_date.desc()) \
                 .offset((page - 1) * per_page) \
                 .limit(per_page) \
                 .all()
