@@ -198,14 +198,9 @@ class TransactionParser:
 
         # Amount and currency: Currency code with decimal or integer (with optional commas)
         # Valid currency codes (ISO 4217)
+        # TODO: This list shuld be dynamic or configurable by the user or admin
         valid_currencies = [
             'OMR', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'QAR', 'KWD', 'BHD', 'JPY',
-            # 'CHF', 'CAD', 'AUD', 'NZD', 'SEK', 'NOK', 'DKK', 'PLN', 'CZK', 'HUF',
-            # 'TRY', 'ZAR', 'INR', 'CNY', 'SGD', 'HKD', 'MYR', 'THB', 'IDR', 'PHP',
-            # 'KRW', 'TWD', 'VND', 'BRL', 'MXN', 'CLP', 'COP', 'PEN', 'ARS', 'UYU',
-            # 'EGP', 'MAD', 'TND', 'DZD', 'LYD', 'SDG', 'ETB', 'KES', 'UGX', 'TZS',
-            # 'GHS', 'NGN', 'XOF', 'XAF', 'ZMW', 'BWP', 'MZN', 'AOA', 'RUB', 'UAH',
-            # 'BYN', 'GEL', 'AMD', 'AZN', 'KZT', 'UZS', 'KGS', 'TJS', 'TMT', 'MNT'
         ]
 
         # Create pattern that matches valid currency codes
