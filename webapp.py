@@ -22,6 +22,7 @@ from threading import Lock
 from money_tracker.services.parser_service import TransactionParser
 from money_tracker.services.email_service import EmailService
 from money_tracker.services.counterparty_service import CounterpartyService
+from money_tracker.services.pdf_parser_service import PDFParser
 from money_tracker.models.database import Database
 from money_tracker.models.models import TransactionRepository, User, Account, EmailConfiguration, Transaction, Category, CategoryMapping, CategoryType
 from money_tracker.config import settings
@@ -39,6 +40,7 @@ app = Flask(__name__, template_folder='templates')
 app.secret_key = os.getenv('SECRET_KEY', 'dev_key_for_development_only')
 app.config['UPLOAD_FOLDER'] = os.getenv('UPLOAD_FOLDER', 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload size
+app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
 
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -53,6 +55,10 @@ counterparty_service = CounterpartyService()
 # Task manager for tracking email fetching tasks
 email_tasks = {}
 email_tasks_lock = Lock()
+
+# Helper function to check if a file has an allowed extension
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 # Dictionary to track which accounts are currently being scraped
 # Format: {account_number: {'user_id': user_id, 'task_id': task_id, 'start_time': time.time()}}
@@ -853,6 +859,104 @@ def results():
         return redirect(url_for('dashboard'))
 
     return render_template('results.html', transaction=transaction_data)
+
+@app.route('/upload_pdf', methods=['GET', 'POST'])
+@login_required
+def upload_pdf():
+    """Upload and parse PDF bank statement."""
+    if request.method == 'POST':
+        user_id = session.get('user_id')
+        account_number = request.form.get('account_number')
+
+        if not account_number:
+            flash('Please select an account', 'error')
+            return redirect(url_for('dashboard'))
+
+        # Check if the post request has the file part
+        if 'pdf_file' not in request.files:
+            flash('No file part', 'error')
+            return redirect(url_for('dashboard'))
+
+        file = request.files['pdf_file']
+        
+        # If user does not select file, browser also
+        # submit an empty part without filename
+        if file.filename == '':
+            flash('No selected file', 'error')
+            return redirect(url_for('dashboard'))
+
+        if file and allowed_file(file.filename):
+            # Generate a unique filename to avoid collisions
+            filename = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}")
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+
+            try:
+                # Parse the PDF file
+                pdf_parser = PDFParser()
+                transactions = pdf_parser.parse_pdf(filepath)
+
+                if not transactions:
+                    flash('No transactions found in the PDF file', 'error')
+                    # Clean up the uploaded file
+                    os.remove(filepath)
+                    return redirect(url_for('dashboard'))
+
+                # Store transactions in the database
+                db_session = db.get_session()
+                try:
+                    transaction_count = 0
+                    for transaction_data in transactions:
+                        # Add user_id and account_number to transaction data
+                        transaction_data['user_id'] = user_id
+                        transaction_data['account_number'] = account_number
+                        
+                        # Add preserve_balance flag
+                        preserve_balance = 'preserve_balance' in request.form
+                        transaction_data['preserve_balance'] = preserve_balance
+                        
+                        # Create transaction in database
+                        transaction = TransactionRepository.create_transaction(db_session, transaction_data)
+                        if transaction:
+                            transaction_count += 1
+                    
+                    if transaction_count > 0:
+                        flash(f'Successfully imported {transaction_count} transactions from PDF', 'success')
+                    else:
+                        flash('No transactions were imported from the PDF', 'warning')
+                    
+                    # Clean up the uploaded file
+                    os.remove(filepath)
+                    return redirect(url_for('account_details', account_number=account_number))
+                except Exception as e:
+                    logger.error(f"Error saving transactions to database: {str(e)}")
+                    flash(f'Error saving to database: {str(e)}', 'error')
+                    return redirect(url_for('dashboard'))
+                finally:
+                    db.close_session(db_session)
+            except Exception as e:
+                logger.error(f"Error parsing PDF file: {str(e)}")
+                flash(f'Error parsing PDF file: {str(e)}', 'error')
+                # Clean up the uploaded file if it exists
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                return redirect(url_for('dashboard'))
+        else:
+            flash('File type not allowed. Please upload a PDF file.', 'error')
+            return redirect(url_for('dashboard'))
+
+    # GET request - render the upload form
+    db_session = db.get_session()
+    try:
+        # Get user accounts for the dropdown
+        accounts = TransactionRepository.get_user_accounts(db_session, session.get('user_id'))
+        return render_template('upload_pdf.html', accounts=accounts)
+    except Exception as e:
+        logger.error(f"Error getting user accounts: {str(e)}")
+        flash(f'Error: {str(e)}', 'error')
+        return redirect(url_for('dashboard'))
+    finally:
+        db.close_session(db_session)
 
 @app.route('/accounts')
 @login_required
