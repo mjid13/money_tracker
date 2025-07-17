@@ -302,9 +302,9 @@ class TransactionParser:
             transaction_data = {
                 'bank_name': bank_name,
                 'email_id': email_data.get('id'),
-                'post_date': email_data.get('date'),  # Renamed from email_date
+                'post_date': email_data.get('date'),
                 'currency': extracted_data.get('currency', 'OMR'),
-                'cleaned_email_content': clean_text  # Include the cleaned email content
+                'cleaned_email_content': clean_text
             }
 
             # Map the extracted data to transaction_data
@@ -338,13 +338,10 @@ class TransactionParser:
             if extracted_data.get('transaction_id'):
                 transaction_data['transaction_id'] = extracted_data['transaction_id']
 
-            if extracted_data.get('description'):
-                transaction_data['description'] = extracted_data['description']
 
             if extracted_data.get('branch'):
                 transaction_data['branch'] = extracted_data['branch']
 
-            # Add the new fields
             transaction_data['transaction_sender'] = extracted_data.get('from')
             transaction_data['transaction_receiver'] = extracted_data.get('to')
             transaction_data['counterparty_name'] = extracted_data.get('counterparty_name')

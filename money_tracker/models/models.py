@@ -220,10 +220,7 @@ class Transaction(Base):
     transaction_receiver = Column(String(200))
     counterparty_name = Column(String(200))
 
-    # New fields from your function
-    from_party = Column(String(200))  # 'me' or actual name
-    to_party = Column(String(200))    # 'me' or actual name
-    transaction_details = Column(String(500))  # TRANSFER, Cash Dep, SALARY, etc.
+    transaction_details = Column(String(500))
 
     # Additional fields
     country = Column(String(100))
@@ -253,13 +250,13 @@ class Transaction(Base):
     def email_date(self):
         """Backward compatibility property for post_date."""
         return self.post_date
-        
+
     @property
     def description(self):
         """Backward compatibility property for description.
         Returns transaction_details or counterparty_name as fallback."""
         return self.transaction_details or self.counterparty_name or None
-        
+
     @property
     def email_id(self):
         """Backward compatibility property for email_id.
@@ -267,7 +264,7 @@ class Transaction(Base):
         if self.email_metadata:
             return self.email_metadata.email_id
         return None
-        
+
     @property
     def bank_name(self):
         """Backward compatibility property for bank_name.
@@ -1053,11 +1050,11 @@ class TransactionRepository:
             # Create a copy of transaction_data without the removed fields
             fields_to_exclude = ['branch', 'description', 'email_id', 'bank_name']
             transaction_data_copy = {k: v for k, v in transaction_data.items() if k not in fields_to_exclude}
-            
+
             # If description is provided but transaction_details is not, use description for transaction_details
             if 'description' in transaction_data and 'transaction_details' not in transaction_data_copy:
                 transaction_data_copy['transaction_details'] = transaction_data.get('description')
-            
+
             transaction = Transaction(
                 account_id=account.id,
                 email_metadata_id=email_metadata_id,
@@ -1069,8 +1066,6 @@ class TransactionRepository:
                 transaction_sender=transaction_data_copy.get('transaction_sender'),
                 transaction_receiver=transaction_data_copy.get('transaction_receiver'),
                 counterparty_name=transaction_data_copy.get('counterparty_name'),
-                from_party=transaction_data_copy.get('from_party'),
-                to_party=transaction_data_copy.get('to_party'),
                 transaction_details=transaction_data_copy.get('transaction_details'),
                 country=transaction_data_copy.get('country'),
                 post_date=transaction_data_copy.get('post_date'),  # Using email_date from input for backward compatibility
@@ -1257,7 +1252,7 @@ class TransactionRepository:
                 # Skip fields that have been moved or removed
                 if key in ['branch', 'description', 'email_id', 'bank_name']:
                     continue
-                
+
                 # If description is provided, use it for transaction_details if not already set
                 if key == 'description' and not transaction.transaction_details:
                     setattr(transaction, 'transaction_details', value)
