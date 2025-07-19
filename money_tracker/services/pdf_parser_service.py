@@ -10,7 +10,18 @@ import pandas as pd
 import fitz  # PyMuPDF
 from datetime import datetime
 
+from pdfminer.pdfparser import PDFParser
+
 logger = logging.getLogger(__name__)
+
+
+def get_table_bounds(table_structure: List[Dict[str, Any]]) -> Optional[Tuple[float, float, float, float]]:
+    """Return (x1,y1,x2,y2) of the first rectangle, or None."""
+    for el in table_structure:
+        if el['type'] == 'rectangle':
+            return el['x1'], el['y1'], el['x2'], el['y2']
+    return None
+
 
 class PDFTableExtractor:
     """Class for extracting tables from PDF bank statements."""
@@ -120,15 +131,8 @@ class PDFTableExtractor:
             }
         }
 
-    def get_table_bounds(self, table_structure: List[Dict[str, Any]]) -> Optional[Tuple[float, float, float, float]]:
-        """Return (x1,y1,x2,y2) of the first rectangle, or None."""
-        for el in table_structure:
-            if el['type'] == 'rectangle':
-                return el['x1'], el['y1'], el['x2'], el['y2']
-        return None
-
     def get_column_boundaries(self, table_structure):
-        table_bounds = self.get_table_bounds(table_structure)
+        table_bounds = get_table_bounds(table_structure)
         if table_bounds is None:
             return []
 
@@ -147,7 +151,7 @@ class PDFTableExtractor:
         return cols
 
     def get_row_boundaries(self, table_structure):
-        table_bounds = self.get_table_bounds(table_structure)
+        table_bounds = get_table_bounds(table_structure)
         if table_bounds is None:
             return []
 
@@ -427,8 +431,9 @@ class PDFParser:
             transactions.append(transaction_data)
         
         return transactions
-    
-    def _parse_narration(self, narration: str) -> Dict[str, Any]:
+
+    @staticmethod
+    def _parse_narration(narration: str) -> Dict[str, Any]:
         """
         Parse counterparty name and transaction ID from narration.
         

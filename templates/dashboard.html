@@ -93,187 +93,144 @@
     <div class="col-md-6">
         <div class="card h-100">
             <div class="card-header bg-transparent border-bottom-0">
-                <h3 class="h4 mb-0">Process Email</h3>
+                <h3 class="h4 mb-0">Upload Transactions</h3>
             </div>
             <div class="card-body">
                 {% if accounts %}
-                <form action="{{ url_for('fetch_emails') }}" method="post" class="needs-validation" novalidate>
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="mb-4">
-                        <label for="account_number" class="form-label">Select Account</label>
-                        <select class="form-select form-select-lg" id="account_number" name="account_number" required>
-                            <option value="">Select an account</option>
-                            {% for account in accounts %}
-                            <option value="{{ account.account_number }}|{{ account.bank_name }}" {% if account.account_number in scraping_account_numbers %}disabled{% endif %}>
-                                {{ account.bank_name }} - {{ account.account_number }}
-                                {% if account.account_number in scraping_account_numbers %}(Scraping in progress...){% endif %}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="mb-4">
-                        <label for="folder" class="form-label">Email Folder</label>
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-folder"></i></span>
-                            <input type="text" class="form-control" id="folder" name="folder" value="INBOX">
-                        </div>
-                    </div>
-
-                    <div class="mb-4">
-                        <div class="form-check form-switch">
-                            <input type="checkbox" class="form-check-input" id="unread_only" name="unread_only" checked>
-                            <label class="form-check-label" for="unread_only">Only fetch unread emails</label>
-                        </div>
-                        <div class="form-check form-switch mt-2">
-                            <input type="checkbox" class="form-check-input" id="save_to_db" name="save_to_db" checked>
-                            <label class="form-check-label" for="save_to_db">Save transactions to database</label>
-                        </div>
-                        <div class="form-check form-switch mt-2">
-                            <input type="checkbox" class="form-check-input" id="preserve_balance" name="preserve_balance" checked>
-                            <label class="form-check-label" for="preserve_balance">Preserve initial account balance during first scrape</label>
-                        </div>
-                    </div>
-
-                    <div class="alert alert-info d-flex align-items-center mb-4" role="alert">
-                        <i class="bi bi-info-circle-fill me-2 fs-5"></i>
-                        <div>
-                            <strong>Note:</strong> Fetching emails may take some time. You can continue using the website while emails are being processed.
-                        </div>
-                    </div>
-
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary btn-lg">
-                            <i class="bi bi-envelope me-2"></i>Fetch Emails
-                            <div class="spinner-border spinner-border-sm ms-2 d-none" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                        </button>
-                    </div>
-                </form>
-
-                <div class="mt-4 pt-4 border-top">
-                    <h4 class="h5 mb-3">Manual Entry Options</h4>
                     <div class="d-flex gap-2 mb-4">
-                        <a href="{{ url_for('dashboard') }}?mode=paste" class="btn btn-outline-primary w-50">
-                            <i class="bi bi-clipboard me-2"></i>Paste Email
+                        <a href="{{ url_for('dashboard') }}?mode=email" class="btn btn-outline-primary w-50">
+                            <i class="bi bi-clipboard me-2"></i>Email Transactions
                         </a>
                         <a href="{{ url_for('dashboard') }}?mode=upload" class="btn btn-outline-primary w-50">
-                            <i class="bi bi-upload me-2"></i>Upload Email
+                            <i class="bi bi-upload me-2"></i>Statement File
                         </a>
                     </div>
 
-                    {% if request.args.get('mode') == 'paste' %}
+                    {% if request.args.get('mode') == 'email' %}
                     <div class="manual-entry-form">
-                        <h5 class="mb-3">Paste Email Content</h5>
-                        <form action="{{ url_for('parse_email') }}" method="post" class="needs-validation" novalidate>
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="source" value="paste">
+                        {% if email_configs %}
+                            <h5 class="mb-3">Process Email Transactions</h5>
 
-                            <div class="mb-3">
-                                <label for="account_number" class="form-label">Select Account</label>
-                                <select class="form-select" id="account_number" name="account_number" required>
+                            <form action="{{ url_for('fetch_emails') }}" method="post" class="needs-validation" novalidate>
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="mb-4">
+                                <label for="email_account_number" class="form-label">Select Account</label>
+                                <select class="form-select form-select-lg" id="email_account_number" name="account_number" required>
                                     <option value="">Select an account</option>
                                     {% for account in accounts %}
-                                    <option value="{{ account.account_number }}" {% if account.account_number in scraping_account_numbers %}disabled{% endif %}>
+                                    <option value="{{ account.account_number }}|{{ account.bank_name }}" {% if account.account_number in scraping_account_numbers %}disabled{% endif %}>
                                         {{ account.bank_name }} - {{ account.account_number }}
                                         {% if account.account_number in scraping_account_numbers %}(Scraping in progress...){% endif %}
                                     </option>
                                     {% endfor %}
                                 </select>
-                                <div class="invalid-feedback">Please select an account.</div>
                             </div>
 
-                            <div class="mb-3">
-                                <label for="email_content" class="form-label">Email Content</label>
-                                <textarea class="form-control font-monospace"
-                                          id="email_content"
-                                          name="email_content"
-                                          rows="10"
-                                          placeholder="Paste your bank email content here..."
-                                          required></textarea>
-                                <div class="invalid-feedback">Please paste the email content.</div>
-                            </div>
-
-                            <div class="mb-3">
-                                <div class="form-check">
-                                    <input type="checkbox" class="form-check-input" id="save_to_db" name="save_to_db" checked>
-                                    <label class="form-check-label" for="save_to_db">Save transaction to database</label>
+                            <div class="mb-4">
+                                <label for="folder" class="form-label">Email Folder</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-folder"></i></span>
+                                    <input type="text" class="form-control" id="folder" name="folder" value="INBOX">
                                 </div>
-                                <div class="form-check mt-2">
+                            </div>
+
+                            <div class="mb-4">
+                                <div class="form-check form-switch">
+                                    <input type="checkbox" class="form-check-input" id="unread_only" name="unread_only" checked>
+                                    <label class="form-check-label" for="unread_only">Only fetch unread emails</label>
+                                </div>
+                                <div class="form-check form-switch mt-2">
+                                    <input type="checkbox" class="form-check-input" id="save_to_db" name="save_to_db" checked>
+                                    <label class="form-check-label" for="save_to_db">Save transactions to database</label>
+                                </div>
+                                <div class="form-check form-switch mt-2">
                                     <input type="checkbox" class="form-check-input" id="preserve_balance" name="preserve_balance" checked>
                                     <label class="form-check-label" for="preserve_balance">Preserve initial account balance during first scrape</label>
                                 </div>
                             </div>
 
-                            <div class="d-flex justify-content-between">
-                                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
-                                    <i class="bi bi-x-circle me-2"></i>Cancel
-                                </a>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-check2 me-2"></i>Parse Email
-                                </button>
+                            <div class="alert alert-info d-flex align-items-center mb-4" role="alert">
+                                <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+                                <div>
+                                    <strong>Note:</strong> Fetching emails may take some time. You can continue using the website while emails are being processed.
+                                </div>
                             </div>
+
+                            <div class="d-grid gap-2">
+
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="bi bi-envelope me-2"></i>Fetch Emails
+                                    <div class="spinner-border spinner-border-sm ms-2 d-none" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </button>
+                                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+                            </div>
+
                         </form>
-                    </div>
+                        {% else %}
+                            <div class="text-center py-5">
+
+                                <div class="mb-4">
+                                    <i class="bi bi-envelope-paper display-1 text-muted"></i>
+                                </div>
+                                <h2 class="h4 mb-3">No Email Configurations</h2>
+                                <p class="text-body-secondary mb-4">Add an email configuration to start parsing bank emails.</p>
+                                <a href="{{ url_for('add_email_config') }}" class="btn btn-primary">
+                                    <i class="bi bi-plus-circle me-2"></i>Add Your First Configuration
+                                </a>
+                                </div>
+                            </div>
+                        {% endif %}
                     {% endif %}
 
                     {% if request.args.get('mode') == 'upload' %}
                     <div class="manual-entry-form">
-                        <h5 class="mb-3">Upload Email File</h5>
-                        <form action="{{ url_for('parse_email') }}" method="post" class="needs-validation" enctype="multipart/form-data" novalidate>
+                        <h5 class="mb-3">Upload Statement File</h5>
+                        <form action="{{ url_for('upload_pdf') }}" method="post" class="needs-validation" enctype="multipart/form-data" novalidate>
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="source" value="upload">
 
                             <div class="mb-3">
-                                <label for="account_number" class="form-label">Select Account</label>
+                                <label for="account_number" class="form-label">Account *</label>
                                 <select class="form-select" id="account_number" name="account_number" required>
-                                    <option value="">Select an account</option>
+                                    <option value="">-- Select Account --</option>
                                     {% for account in accounts %}
-                                    <option value="{{ account.account_number }}" {% if account.account_number in scraping_account_numbers %}disabled{% endif %}>
-                                        {{ account.bank_name }} - {{ account.account_number }}
-                                        {% if account.account_number in scraping_account_numbers %}(Scraping in progress...){% endif %}
-                                    </option>
+                                        <option value="{{ account.account_number }}">{{ account.account_number }} ({{ account.bank_name }})</option>
                                     {% endfor %}
                                 </select>
-                                <div class="invalid-feedback">Please select an account.</div>
+                                <div class="form-text">Select the account for which you are uploading the statement.</div>
                             </div>
 
                             <div class="mb-3">
-                                <label for="email_file" class="form-label">Email File</label>
-                                <input type="file"
-                                       class="form-control"
-                                       id="email_file"
-                                       name="email_file"
-                                       accept=".txt,.eml"
-                                       required>
-                                <div class="invalid-feedback">Please select a file to upload.</div>
-                                <div class="form-text">Supported formats: .txt, .eml</div>
+                                <label for="pdf_file" class="form-label">PDF Statement *</label>
+                                <input type="file" class="form-control" id="pdf_file" name="pdf_file" accept=".pdf" required>
+                                <div class="form-text">Upload a PDF bank statement. The file must be in PDF format.</div>
                             </div>
 
-                            <div class="mb-3">
-                                <div class="form-check">
-                                    <input type="checkbox" class="form-check-input" id="save_to_db" name="save_to_db" checked>
-                                    <label class="form-check-label" for="save_to_db">Save transaction to database</label>
-                                </div>
-                                <div class="form-check mt-2">
-                                    <input type="checkbox" class="form-check-input" id="preserve_balance" name="preserve_balance" checked>
-                                    <label class="form-check-label" for="preserve_balance">Preserve initial account balance during first scrape</label>
-                                </div>
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" id="preserve_balance" name="preserve_balance">
+                                <label class="form-check-label" for="preserve_balance">Preserve account balance</label>
+                                <div class="form-text">Check this if you want to preserve the current account balance instead of updating it from the statement.</div>
                             </div>
 
-                            <div class="d-flex justify-content-between">
-                                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
-                                    <i class="bi bi-x-circle me-2"></i>Cancel
-                                </a>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-check2 me-2"></i>Upload & Parse
-                                </button>
+                            <div class="alert alert-info">
+                                <h5>Important Information</h5>
+                                <p>The PDF parser will extract transactions from your bank statement and add them to your account. Please ensure:</p>
+                                <ul>
+                                    <li>The PDF is a bank statement with transaction tables</li>
+                                    <li>The statement format matches the supported format</li>
+                                    <li>You've selected the correct account</li>
+                                </ul>
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary btn-lg">Upload and Process</button>
+                                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
                             </div>
                         </form>
+
                     </div>
                     {% endif %}
-                </div>
 
                 {% else %}
                 <div class="text-center py-4">
@@ -287,6 +244,65 @@
             </div>
         </div>
     </div>
+
+
+    {% if accounts %}
+    <div class="col-12">
+        <div class="row g-4">
+            <!-- Income vs Expense Chart -->
+            <div class="col-md-6 col-lg-3">
+                <div class="card h-100 chart-card">
+                    <div class="card-body">
+                        <h5 class="chart-title">Income vs Expense</h5>
+                        <p class="chart-description">Comparison of total income and expenses</p>
+                        <div class="chart-container">
+                            <canvas id="incomeExpenseChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Category Distribution Chart -->
+            <div class="col-md-6 col-lg-3">
+                <div class="card h-100 chart-card">
+                    <div class="card-body">
+                        <h5 class="chart-title">Expense Categories</h5>
+                        <p class="chart-description">Distribution of expenses by category</p>
+                        <div class="chart-container">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Monthly Trend Chart -->
+            <div class="col-md-6 col-lg-3">
+                <div class="card h-100 chart-card">
+                    <div class="card-body">
+                        <h5 class="chart-title">Monthly Trends</h5>
+                        <p class="chart-description">Income and expense trends over time</p>
+                        <div class="chart-container">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Account Balance Chart -->
+            <div class="col-md-6 col-lg-3">
+                <div class="card h-100 chart-card">
+                    <div class="card-body">
+                        <h5 class="chart-title">Account Balances</h5>
+                        <p class="chart-description">Comparison of account balances</p>
+                        <div class="chart-container">
+                            <canvas id="balanceChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
 </div>
 
 {% block extra_css %}
@@ -323,10 +339,42 @@
         animation: spin 2s linear infinite;
         display: inline-block;
     }
+
+    /* Chart styles */
+    .chart-container {
+        position: relative;
+        height: 300px;
+        width: 100%;
+        margin-bottom: 1rem;
+    }
+
+    .chart-card {
+        transition: all 0.3s ease;
+    }
+
+    .chart-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+
+    .chart-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .chart-description {
+        font-size: 0.85rem;
+        color: var(--bs-secondary-color);
+        margin-bottom: 1rem;
+    }
 </style>
 {% endblock %}
 
 {% block extra_js %}
+<!-- Include Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+
 <script>
 // Form validation
 (function () {
@@ -340,13 +388,107 @@
             } else {
                 const submitBtn = form.querySelector('button[type="submit"]')
                 const spinner = submitBtn.querySelector('.spinner-border')
-                spinner.classList.remove('d-none')
-                submitBtn.disabled = true
+                if (spinner) {
+                    spinner.classList.remove('d-none')
+                    submitBtn.disabled = true
+                }
             }
             form.classList.add('was-validated')
         }, false)
     })
 })()
+</script>
+
+<!-- Initialize charts -->
+<script>
+// Initialize charts when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Get chart data from the server-side variable
+    var chartDataStr = '{{ chart_data|default("{}")|safe }}';
+    var chartData = JSON.parse(chartDataStr);
+
+    // Only proceed if we have chart data
+    if (chartData && Object.keys(chartData).length > 0) {
+        // 1. Income vs Expense Chart
+        if (chartData.income_expense && document.getElementById('incomeExpenseChart')) {
+            new Chart(document.getElementById('incomeExpenseChart'), {
+                type: 'doughnut',
+                data: chartData.income_expense,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        // 2. Category Distribution Chart
+        if (chartData.category_distribution && document.getElementById('categoryChart')) {
+            new Chart(document.getElementById('categoryChart'), {
+                type: 'pie',
+                data: chartData.category_distribution,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        // 3. Monthly Trend Chart
+        if (chartData.monthly_trend && document.getElementById('trendChart')) {
+            new Chart(document.getElementById('trendChart'), {
+                type: 'line',
+                data: chartData.monthly_trend,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        // 4. Account Balance Chart
+        if (chartData.account_balance && document.getElementById('balanceChart')) {
+            new Chart(document.getElementById('balanceChart'), {
+                type: 'bar',
+                data: chartData.account_balance,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+    }
+});
 </script>
 {% endblock %}
 {% endblock %}

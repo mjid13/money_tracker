@@ -381,11 +381,164 @@ def dashboard():
         # Get the list of accounts that are currently being scraped
         with email_tasks_lock:
             scraping_account_numbers = list(scraping_accounts.keys())
+            
+        # Prepare data for charts
+        chart_data = {}
+        
+        if accounts:
+            # Import necessary modules for data aggregation
+            from sqlalchemy import func, case, extract
+            from datetime import datetime, timedelta
+            from money_tracker.models.models import Transaction, Category, TransactionType
+            
+            # 1. Income vs. Expense Comparison Chart
+            income_expense_data = db_session.query(
+                func.sum(case((Transaction.transaction_type == TransactionType.INCOME, Transaction.amount), else_=0)).label('total_income'),
+                func.sum(case((Transaction.transaction_type == TransactionType.EXPENSE, Transaction.amount), else_=0)).label('total_expense')
+            ).join(Account).filter(
+                Account.user_id == user_id
+            ).first()
+            
+            chart_data['income_expense'] = {
+                'labels': ['Income', 'Expense'],
+                'datasets': [{
+                    'data': [
+                        float(income_expense_data.total_income or 0),
+                        float(income_expense_data.total_expense or 0)
+                    ],
+                    'backgroundColor': ['#4CAF50', '#F44336']
+                }]
+            }
+            
+            # 2. Category Distribution Pie Chart
+            # Get expense transactions with categories
+            category_data = db_session.query(
+                Category.name,
+                func.sum(Transaction.amount).label('total_amount')
+            ).join(
+                Transaction, Transaction.category_id == Category.id
+            ).join(
+                Account, Transaction.account_id == Account.id
+            ).filter(
+                Account.user_id == user_id,
+                Transaction.transaction_type == TransactionType.EXPENSE
+            ).group_by(
+                Category.name
+            ).order_by(
+                func.sum(Transaction.amount).desc()
+            ).limit(10).all()
+            
+            # Format data for pie chart
+            category_labels = [cat.name for cat in category_data]
+            category_values = [float(cat.total_amount) for cat in category_data]
+            
+            # Generate colors for categories
+            category_colors = [
+                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                '#FF9F40', '#8AC249', '#EA5545', '#F46A9B', '#EF9B20'
+            ]
+            
+            chart_data['category_distribution'] = {
+                'labels': category_labels,
+                'datasets': [{
+                    'data': category_values,
+                    'backgroundColor': category_colors[:len(category_labels)]
+                }]
+            }
+            
+            # 3. Monthly Transaction Trend Line Chart
+            # Get data for the last 6 months
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=180)  # Approximately 6 months
+            
+            # Query monthly aggregates
+            monthly_data = db_session.query(
+                extract('year', Transaction.value_date).label('year'),
+                extract('month', Transaction.value_date).label('month'),
+                func.sum(case((Transaction.transaction_type == TransactionType.INCOME, Transaction.amount), else_=0)).label('income'),
+                func.sum(case((Transaction.transaction_type == TransactionType.EXPENSE, Transaction.amount), else_=0)).label('expense')
+            ).join(
+                Account, Transaction.account_id == Account.id
+            ).filter(
+                Account.user_id == user_id,
+                Transaction.value_date.between(start_date, end_date)
+            ).group_by(
+                extract('year', Transaction.value_date),
+                extract('month', Transaction.value_date)
+            ).order_by(
+                extract('year', Transaction.value_date),
+                extract('month', Transaction.value_date)
+            ).all()
+            
+            # Format data for line chart
+            months = []
+            income_values = []
+            expense_values = []
+            
+            for data in monthly_data:
+                month_name = datetime(int(data.year), int(data.month), 1).strftime('%b %Y')
+                months.append(month_name)
+                income_values.append(float(data.income or 0))
+                expense_values.append(float(data.expense or 0))
+            
+            chart_data['monthly_trend'] = {
+                'labels': months,
+                'datasets': [
+                    {
+                        'label': 'Income',
+                        'data': income_values,
+                        'borderColor': '#4CAF50',
+                        'backgroundColor': 'rgba(76, 175, 80, 0.1)',
+                        'fill': True
+                    },
+                    {
+                        'label': 'Expense',
+                        'data': expense_values,
+                        'borderColor': '#F44336',
+                        'backgroundColor': 'rgba(244, 67, 54, 0.1)',
+                        'fill': True
+                    }
+                ]
+            }
+            
+            # 4. Account Balance Comparison Chart
+            account_data = []
+            for account in accounts:
+                account_data.append({
+                    'account_number': account.account_number,
+                    'bank_name': account.bank_name,
+                    'balance': float(account.balance),
+                    'currency': account.currency
+                })
+            
+            # Sort accounts by balance (descending)
+            account_data.sort(key=lambda x: x['balance'], reverse=True)
+            
+            # Format data for bar chart
+            account_labels = [f"{acc['bank_name']} ({acc['account_number'][-4:]})" for acc in account_data]
+            account_balances = [acc['balance'] for acc in account_data]
+            account_currencies = [acc['currency'] for acc in account_data]
+            
+            chart_data['account_balance'] = {
+                'labels': account_labels,
+                'datasets': [{
+                    'label': 'Balance',
+                    'data': account_balances,
+                    'backgroundColor': '#2196F3',
+                    'borderColor': '#1976D2',
+                    'borderWidth': 1
+                }],
+                'currencies': account_currencies
+            }
+        
+        # Convert chart data to JSON for the template
+        chart_data_json = json.dumps(chart_data)
 
         return render_template('dashboard.html', 
                               accounts=accounts, 
                               email_configs=email_configs,
-                              scraping_account_numbers=scraping_account_numbers)
+                              scraping_account_numbers=scraping_account_numbers,
+                              chart_data=chart_data_json)
     except Exception as e:
         logger.error(f"Error loading dashboard: {str(e)}")
         flash('Error loading dashboard. Please try again.', 'error')
@@ -753,20 +906,51 @@ def parse_email():
         flash('Please select an account', 'error')
         return redirect(url_for('dashboard'))
 
-    if source == 'paste':
-        # Handle pasted email content
-        email_content = request.form.get('email_content')
-        if not email_content:
-            flash('Please paste email content', 'error')
+    if source == 'email':
+        # Parse the email data
+        transaction_data = parser.parse_email(email_data)
+
+        if not transaction_data:
+            flash('Failed to parse email content. Make sure it contains valid transaction data.', 'error')
             return redirect(url_for('dashboard'))
 
-        email_data = {
-            'id': f'manual_{datetime.now().strftime("%Y%m%d%H%M%S")}',
-            'subject': request.form.get('subject', 'Manual Entry'),
-            'from': request.form.get('from', 'manual@example.com'),
-            'date': datetime.now().strftime('%a, %d %b %Y %H:%M:%S %z'),
-            'body': email_content
-        }
+        # Check if the account is different
+        if account_number[-4:] not in transaction_data.get('account_number'):
+            flash(
+                f'Transaction account number {transaction_data.get("account_number")} does not match selected account {account_number}',
+                'error')
+            return redirect(url_for('dashboard'))
+
+        # Add user_id and account_number to transaction data
+        transaction_data['user_id'] = user_id
+        transaction_data['account_number'] = account_number
+        transaction_data['email_data'] = email_data
+
+        # Store the transaction data in session for display
+        session['transaction_data'] = transaction_data
+
+        # Optionally save to database if requested
+        save_to_db = 'save_to_db' in request.form
+        preserve_balance = 'preserve_balance' in request.form
+
+        if save_to_db:
+            db_session = db.get_session()
+            try:
+                # Add preserve_balance flag to transaction data
+                transaction_data['preserve_balance'] = preserve_balance
+                transaction = TransactionRepository.create_transaction(db_session, transaction_data)
+                if transaction:
+                    flash('Transaction saved to database', 'success')
+                else:
+                    flash('Failed to save transaction to database', 'error')
+            except Exception as e:
+                logger.error(f"Error saving transaction to database: {str(e)}")
+                flash(f'Error saving to database: {str(e)}', 'error')
+            finally:
+                db.close_session(db_session)
+
+        return redirect(url_for('results'))
+
 
     elif source == 'upload':
         # Handle uploaded email file
@@ -807,47 +991,6 @@ def parse_email():
         flash('Invalid source', 'error')
         return redirect(url_for('dashboard'))
 
-    # Parse the email data
-    transaction_data = parser.parse_email(email_data)
-
-    if not transaction_data:
-        flash('Failed to parse email content. Make sure it contains valid transaction data.', 'error')
-        return redirect(url_for('dashboard'))
-
-    # Check if the account is different
-    if account_number[-4:] not in transaction_data.get('account_number'):
-        flash(f'Transaction account number {transaction_data.get("account_number")} does not match selected account {account_number}', 'error')
-        return redirect(url_for('dashboard'))
-
-    # Add user_id and account_number to transaction data
-    transaction_data['user_id'] = user_id
-    transaction_data['account_number'] = account_number
-    transaction_data['email_data'] = email_data
-
-    # Store the transaction data in session for display
-    session['transaction_data'] = transaction_data
-
-    # Optionally save to database if requested
-    save_to_db = 'save_to_db' in request.form
-    preserve_balance = 'preserve_balance' in request.form
-
-    if save_to_db:
-        db_session = db.get_session()
-        try:
-            # Add preserve_balance flag to transaction data
-            transaction_data['preserve_balance'] = preserve_balance
-            transaction = TransactionRepository.create_transaction(db_session, transaction_data)
-            if transaction:
-                flash('Transaction saved to database', 'success')
-            else:
-                flash('Failed to save transaction to database', 'error')
-        except Exception as e:
-            logger.error(f"Error saving transaction to database: {str(e)}")
-            flash(f'Error saving to database: {str(e)}', 'error')
-        finally:
-            db.close_session(db_session)
-
-    return redirect(url_for('results'))
 
 @app.route('/results')
 @login_required
@@ -953,7 +1096,7 @@ def upload_pdf():
     try:
         # Get user accounts for the dropdown
         accounts = TransactionRepository.get_user_accounts(db_session, session.get('user_id'))
-        return render_template('upload_pdf.html', accounts=accounts)
+        return render_template('dashboard.html', accounts=accounts)
     except Exception as e:
         logger.error(f"Error getting user accounts: {str(e)}")
         flash(f'Error: {str(e)}', 'error')
