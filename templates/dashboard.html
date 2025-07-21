@@ -34,7 +34,7 @@
                 <a href="{{ url_for('counterparties') }}" class="btn btn-outline-primary">
                     <i class="bi bi-people me-2"></i>Counterparties
                 </a>
-                <a href="{{ url_for('auto_categorize') }}" class="btn btn-outline-secondary">
+                <a href="{{ url_for('auto_categorize') }}" class="btn btn-outline-warning">
                     <i class="bi bi-magic me-2"></i>Auto-Categorize
                 </a>
             </div>
@@ -98,7 +98,7 @@
             <div class="card-body">
                 {% if accounts %}
                     <div class="d-flex gap-2 mb-4">
-                        <a href="{{ url_for('dashboard') }}?mode=email" class="btn btn-outline-primary w-50">
+                        <a href="{{ url_for('dashboard') }}?mode=email" class="btn btn-outline-primary w-50" method="get" >
                             <i class="bi bi-clipboard me-2"></i>Email Transactions
                         </a>
                         <a href="{{ url_for('dashboard') }}?mode=upload" class="btn btn-outline-primary w-50">
@@ -249,20 +249,21 @@
     {% if accounts %}
     <div class="col-12">
         <div class="row g-4">
-            <!-- Income vs Expense Chart -->
-            <div class="col-md-6 col-lg-3">
+
+            <!-- Monthly Trend Chart -->
+            <div class="col-md-6 col-lg-6">
                 <div class="card h-100 chart-card">
                     <div class="card-body">
-                        <h5 class="chart-title">Income vs Expense</h5>
-                        <p class="chart-description">Comparison of total income and expenses</p>
+                        <h5 class="chart-title">Monthly Trends</h5>
+                        <p class="chart-description">Income and expense trends over time</p>
                         <div class="chart-container">
-                            <canvas id="incomeExpenseChart"></canvas>
+                            <canvas id="trendChart"></canvas>
                         </div>
                     </div>
                 </div>
             </div>
             <!-- Category Distribution Chart -->
-            <div class="col-md-6 col-lg-3">
+            <div class="col-md-6 col-lg-6">
                 <div class="card h-100 chart-card">
                     <div class="card-body">
                         <h5 class="chart-title">Expense Categories</h5>
@@ -274,27 +275,27 @@
                 </div>
             </div>
 
-            <!-- Monthly Trend Chart -->
-            <div class="col-md-6 col-lg-3">
-                <div class="card h-100 chart-card">
-                    <div class="card-body">
-                        <h5 class="chart-title">Monthly Trends</h5>
-                        <p class="chart-description">Income and expense trends over time</p>
-                        <div class="chart-container">
-                            <canvas id="trendChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- Account Balance Chart -->
-            <div class="col-md-6 col-lg-3">
+            <div class="col-md-6 col-lg-6">
                 <div class="card h-100 chart-card">
                     <div class="card-body">
                         <h5 class="chart-title">Account Balances</h5>
                         <p class="chart-description">Comparison of account balances</p>
                         <div class="chart-container">
                             <canvas id="balanceChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Income vs Expense Chart -->
+            <div class="col-md-6 col-lg-6">
+                <div class="card h-100 chart-card">
+                    <div class="card-body">
+                        <h5 class="chart-title">Income vs Expense</h5>
+                        <p class="chart-description">Comparison of total income and expenses</p>
+                        <div class="chart-container">
+                            <canvas id="incomeExpenseChart"></canvas>
                         </div>
                     </div>
                 </div>

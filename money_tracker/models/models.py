@@ -184,6 +184,47 @@ class Category(Base):
         UniqueConstraint('user_id', 'name', name='_user_category_uc'),
     )
 
+class Counterparty(Base):
+    """Counterparty model representing entities involved in transactions."""
+    __tablename__ = 'counterparties'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(200), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    transactions = relationship("Transaction", back_populates="counterparty")
+    category_mappings = relationship("CounterpartyCategory", back_populates="counterparty", cascade="all, delete-orphan")
+
+    # Ensure counterparty names are unique
+    __table_args__ = (
+        UniqueConstraint('name', name='_counterparty_name_uc'),
+    )
+
+
+class CounterpartyCategory(Base):
+    """Model for mapping counterparties to categories per user."""
+    __tablename__ = 'counterparty_categories'
+
+    id = Column(Integer, primary_key=True)
+    counterparty_id = Column(Integer, ForeignKey('counterparties.id'), nullable=False)
+    category_id = Column(Integer, ForeignKey('categories.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    counterparty = relationship("Counterparty", back_populates="category_mappings")
+    category = relationship("Category")
+    user = relationship("User")
+
+    # Ensure mappings are unique per user, counterparty, and category
+    __table_args__ = (
+        UniqueConstraint('user_id', 'counterparty_id', 'category_id', name='_user_counterparty_category_uc'),
+    )
+
+
 class CategoryMapping(Base):
     """Model for mapping transactions to categories based on counterparty or description."""
     __tablename__ = 'category_mappings'
@@ -216,8 +257,11 @@ class Transaction(Base):
     value_date = Column(DateTime, nullable=True)
     transaction_id = Column(String(100))  # Bank's transaction reference
     category_id = Column(Integer, ForeignKey('categories.id'), nullable=True)
+    
+    # New counterparty relationship
+    counterparty_id = Column(Integer, ForeignKey('counterparties.id'), nullable=True)
 
-    # Counterparty information
+    # Legacy counterparty information (kept for migration purposes)
     transaction_sender = Column(String(200))
     transaction_receiver = Column(String(200))
     counterparty_name = Column(String(200))
@@ -241,6 +285,7 @@ class Transaction(Base):
     account = relationship("Account", back_populates="transactions")
     email_metadata = relationship("EmailMetadata", back_populates="transactions")
     category = relationship("Category")
+    counterparty = relationship("Counterparty", back_populates="transactions")
 
     # Properties for backward compatibility
     @property
@@ -256,8 +301,14 @@ class Transaction(Base):
     @property
     def description(self):
         """Backward compatibility property for description.
-        Returns transaction_details or counterparty_name as fallback."""
-        return self.transaction_details or self.counterparty_name or None
+        Returns transaction_details or counterparty name as fallback."""
+        if self.transaction_details:
+            return self.transaction_details
+        elif self.counterparty:
+            return self.counterparty.name
+        elif self.counterparty_name:  # Legacy fallback
+            return self.counterparty_name
+        return None
 
     @property
     def email_id(self):
@@ -665,7 +716,7 @@ class CategoryRepository:
     @staticmethod
     def auto_categorize_transaction(session: Session, transaction_id: int, user_id: int) -> Optional[Transaction]:
         """
-        Auto-categorize a transaction based on counterparty_name or description.
+        Auto-categorize a transaction based on counterparty or description.
 
         Args:
             session (Session): Database session.
@@ -684,8 +735,22 @@ class CategoryRepository:
             if not transaction:
                 logger.error(f"Transaction {transaction_id} not found or user {user_id} does not have permission")
                 return None
+                
+            # Try to categorize by counterparty_id first (new relationship)
+            if transaction.counterparty_id:
+                # Check for a user-specific category mapping for this counterparty
+                counterparty_category = session.query(CounterpartyCategory).filter(
+                    CounterpartyCategory.counterparty_id == transaction.counterparty_id,
+                    CounterpartyCategory.user_id == user_id
+                ).first()
+                
+                if counterparty_category:
+                    transaction.category_id = counterparty_category.category_id
+                    session.commit()
+                    logger.info(f"Auto-categorized transaction {transaction_id} by counterparty_id match")
+                    return transaction
 
-            # Try to categorize by exact counterparty_name match first
+            # Try to categorize by exact counterparty_name match (legacy approach)
             if transaction.counterparty_name:
                 mapping = session.query(CategoryMapping).join(Category).filter(
                     CategoryMapping.mapping_type == CategoryType.COUNTERPARTY,
@@ -1113,7 +1178,26 @@ class TransactionRepository:
             # If description is provided but transaction_details is not, use description for transaction_details
             if 'description' in transaction_data and 'transaction_details' not in transaction_data_copy:
                 transaction_data_copy['transaction_details'] = transaction_data.get('description')
-
+                
+            # Handle counterparty
+            counterparty_id = None
+            counterparty_name = transaction_data_copy.get('counterparty_name')
+            
+            if counterparty_name:
+                # Check if counterparty already exists
+                counterparty = session.query(Counterparty).filter(
+                    Counterparty.name == counterparty_name
+                ).first()
+                
+                if not counterparty:
+                    # Create new counterparty
+                    counterparty = Counterparty(name=counterparty_name)
+                    session.add(counterparty)
+                    session.flush()  # Get ID without committing
+                    logger.info(f"Created new counterparty: {counterparty.name} with ID {counterparty.id}")
+                
+                counterparty_id = counterparty.id
+            
             transaction = Transaction(
                 account_id=account.id,
                 email_metadata_id=email_metadata_id,
@@ -1124,7 +1208,8 @@ class TransactionRepository:
                 transaction_id=transaction_data_copy.get('transaction_id'),
                 transaction_sender=transaction_data_copy.get('transaction_sender'),
                 transaction_receiver=transaction_data_copy.get('transaction_receiver'),
-                counterparty_name=transaction_data_copy.get('counterparty_name'),
+                counterparty_name=counterparty_name,  # Keep for backward compatibility
+                counterparty_id=counterparty_id,  # Set the new counterparty relationship
                 transaction_details=transaction_data_copy.get('transaction_details'),
                 country=transaction_data_copy.get('country'),
                 post_date=transaction_data_copy.get('post_date'),  # Using email_date from input for backward compatibility
@@ -1300,6 +1385,29 @@ class TransactionRepository:
             old_amount = transaction.amount
             old_type = transaction.transaction_type
 
+            # Handle counterparty if counterparty_name is being updated
+            if 'counterparty_name' in transaction_data and transaction_data['counterparty_name'] != transaction.counterparty_name:
+                counterparty_name = transaction_data['counterparty_name']
+                
+                if counterparty_name:
+                    # Check if counterparty already exists
+                    counterparty = session.query(Counterparty).filter(
+                        Counterparty.name == counterparty_name
+                    ).first()
+                    
+                    if not counterparty:
+                        # Create new counterparty
+                        counterparty = Counterparty(name=counterparty_name)
+                        session.add(counterparty)
+                        session.flush()  # Get ID without committing
+                        logger.info(f"Created new counterparty: {counterparty.name} with ID {counterparty.id}")
+                    
+                    # Update transaction's counterparty_id
+                    transaction.counterparty_id = counterparty.id
+                else:
+                    # If counterparty_name is empty, set counterparty_id to None
+                    transaction.counterparty_id = None
+            
             # Update transaction fields
             for key, value in transaction_data.items():
                 if key == 'transaction_type':
@@ -1309,7 +1417,7 @@ class TransactionRepository:
                         value = TransactionType.UNKNOWN
                 
                 # Skip fields that have been moved or removed
-                if key in ['branch', 'description', 'email_id', 'bank_name']:
+                if key in ['branch', 'description', 'email_id', 'bank_name', 'counterparty_id']:
                     continue
 
                 # If description is provided, use it for transaction_details if not already set
@@ -1426,7 +1534,9 @@ class TransactionRepository:
 
     @staticmethod
     def get_account_transaction_history(session: Session, user_id: int, account_number: str,
-                                        page: int = 1, per_page: int = 200) -> Dict[str, Any]:
+                                        page: int = 1, per_page: int = 200, date_from: datetime = None,
+                                        date_to: datetime = None, transaction_type: str = None,
+                                        search_text: str = None) -> Dict[str, Any]:
         """
         Get paginated transaction history for an account with HTML-friendly formatting.
 
@@ -1436,6 +1546,10 @@ class TransactionRepository:
             account_number (str): Account number.
             page (int): Page number (1-based).
             per_page (int): Number of items per page.
+            date_from (datetime, optional): Filter transactions from this date.
+            date_to (datetime, optional): Filter transactions to this date.
+            transaction_type (str, optional): Filter by transaction type (INCOME, EXPENSE, TRANSFER).
+            search_text (str, optional): Search text to filter by counterparty, amount, or description.
 
         Returns:
             Dict[str, Any]: Dictionary containing transactions and pagination info.
@@ -1459,6 +1573,37 @@ class TransactionRepository:
             query = session.query(Transaction).filter(
                 Transaction.account_id == account.id
             )
+            
+            # Apply date range filters if provided
+            if date_from:
+                query = query.filter(Transaction.value_date >= date_from)
+                
+            if date_to:
+                query = query.filter(Transaction.value_date <= date_to)
+                
+            # Apply transaction type filter if provided
+            if transaction_type:
+                # Handle case difference between string values and enum values
+                if transaction_type == 'INCOME':
+                    query = query.filter(Transaction.transaction_type == TransactionType.INCOME)
+                elif transaction_type == 'EXPENSE':
+                    query = query.filter(Transaction.transaction_type == TransactionType.EXPENSE)
+                elif transaction_type == 'TRANSFER':
+                    query = query.filter(Transaction.transaction_type == TransactionType.TRANSFER)
+                else:
+                    logger.warning(f"Unknown transaction type: {transaction_type}")
+            
+            # Apply search text filter if provided
+            if search_text and search_text.strip():
+                search_pattern = f"%{search_text.strip()}%"
+                query = query.filter(
+                    # Search in counterparty name
+                    (Transaction.counterparty_name.ilike(search_pattern)) |
+                    # Search in transaction details (description)
+                    (Transaction.transaction_details.ilike(search_pattern)) |
+                    # Search in amount (convert to string for comparison)
+                    (Transaction.amount.cast(String).ilike(search_pattern))
+                )
 
             total = query.count()
             pages = (total + per_page - 1) // per_page

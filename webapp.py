@@ -1213,7 +1213,7 @@ def account_details(account_number):
     """Display details for a specific account."""
     user_id = session.get('user_id')
     page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 200, type=int)
+    per_page = request.args.get('per_page', 50, type=int)
     filter_type = request.args.get('filter', None)
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     db_session = db.get_session()
@@ -1233,6 +1233,8 @@ def account_details(account_number):
 
         # Apply filters if specified
         filter_params = {}
+        
+        # Transaction type filter
         if filter_type:
             if filter_type == 'income':
                 filter_params['transaction_type'] = 'INCOME'
@@ -1242,6 +1244,32 @@ def account_details(account_number):
                 filter_params['transaction_type'] = 'TRANSFER'
             elif filter_type == 'recent':
                 filter_params['date_from'] = datetime.now() - timedelta(days=30)
+        
+        # Date range filters
+        date_from_str = request.args.get('date_from')
+        date_to_str = request.args.get('date_to')
+        
+        if date_from_str:
+            try:
+                # Parse the date string from the format YYYY-MM-DD
+                date_from = datetime.strptime(date_from_str, '%Y-%m-%d')
+                filter_params['date_from'] = date_from
+            except ValueError:
+                logger.warning(f"Invalid date_from format: {date_from_str}")
+        
+        if date_to_str:
+            try:
+                # Parse the date string and set it to the end of the day
+                date_to = datetime.strptime(date_to_str, '%Y-%m-%d')
+                date_to = date_to.replace(hour=23, minute=59, second=59)
+                filter_params['date_to'] = date_to
+            except ValueError:
+                logger.warning(f"Invalid date_to format: {date_to_str}")
+        
+        # Search text filter
+        search_text = request.args.get('search')
+        if search_text:
+            filter_params['search_text'] = search_text
 
         transactions_history = TransactionRepository.get_account_transaction_history(
             db_session, user_id, account_number, page=page, per_page=per_page, **filter_params
@@ -1301,6 +1329,8 @@ def export_transactions(account_number):
 
         # Apply filters if specified
         filter_params = {}
+        
+        # Transaction type filter
         if filter_type:
             if filter_type == 'income':
                 filter_params['transaction_type'] = 'INCOME'
@@ -1310,6 +1340,32 @@ def export_transactions(account_number):
                 filter_params['transaction_type'] = 'TRANSFER'
             elif filter_type == 'recent':
                 filter_params['date_from'] = datetime.now() - timedelta(days=30)
+        
+        # Date range filters
+        date_from_str = request.args.get('date_from')
+        date_to_str = request.args.get('date_to')
+        
+        if date_from_str:
+            try:
+                # Parse the date string from the format YYYY-MM-DD
+                date_from = datetime.strptime(date_from_str, '%Y-%m-%d')
+                filter_params['date_from'] = date_from
+            except ValueError:
+                logger.warning(f"Invalid date_from format: {date_from_str}")
+        
+        if date_to_str:
+            try:
+                # Parse the date string and set it to the end of the day
+                date_to = datetime.strptime(date_to_str, '%Y-%m-%d')
+                date_to = date_to.replace(hour=23, minute=59, second=59)
+                filter_params['date_to'] = date_to
+            except ValueError:
+                logger.warning(f"Invalid date_to format: {date_to_str}")
+        
+        # Search text filter
+        search_text = request.args.get('search')
+        if search_text:
+            filter_params['search_text'] = search_text
 
         # Get all transactions without pagination
         transactions_history = TransactionRepository.get_account_transaction_history(
@@ -1994,31 +2050,50 @@ def counterparties():
         flash('Error loading counterparties. Please try again.', 'error')
         return redirect(url_for('dashboard'))
 
-@app.route('/counterparties/categorize', methods=['POST'])
+@app.route('/categorize_counterparty', methods=['POST'])
 @login_required
 def categorize_counterparty():
-    """Categorize a counterparty."""
+    counterparty_name = request.form.get('counterparty_name')
+    description = request.form.get('description', '')
+    category_id = request.form.get('category_id')
     user_id = session.get('user_id')
 
-    counterparty_name = request.form.get('counterparty_name')
-    description = request.form.get('description')
-    category_id = request.form.get('category_id')
 
     if not counterparty_name or not category_id:
-        flash('Counterparty name and category are required', 'error')
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': 'Missing required fields'})
+        flash('Missing required fields', 'error')
         return redirect(url_for('counterparties'))
 
     try:
-        category_id = int(category_id)
-    except ValueError:
-        flash('Invalid category ID', 'error')
-        return redirect(url_for('counterparties'))
+        success = counterparty_service.categorize_counterparty(
+            user_id,
+            counterparty_name,
+            description,
+            int(category_id)
+        )
 
-    result = counterparty_service.categorize_counterparty(user_id, counterparty_name, description, category_id)
-    if result:
-        flash('Counterparty categorized successfully', 'success')
-    else:
-        flash('Error categorizing counterparty', 'error')
+        if success:
+            # Get category name for response
+            category = db.session.query(Category).filter_by(id=category_id, user_id=user_id).first()
+            category_name = category.name if category else 'Unknown'
+
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'success': True,
+                    'message': 'Counterparty categorized successfully',
+                    'category_name': category_name
+                })
+            flash('Counterparty categorized successfully!', 'success')
+        else:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'success': False, 'message': 'Failed to categorize counterparty'})
+            flash('Failed to categorize counterparty', 'error')
+    except Exception as e:
+        logger.error(f"Error categorizing counterparty: {e}")
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': 'An error occurred'})
+        flash('An error occurred', 'error')
 
     return redirect(url_for('counterparties'))
 
