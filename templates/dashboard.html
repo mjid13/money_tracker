@@ -20,7 +20,7 @@
                 </div>
             </div>
             <h1 class="display-5 fw-bold mb-3">Welcome back, {{ session.username }}! 👋</h1>
-            <p class="lead mb-4">Track your finances and manage your transactions all in one place.</p>
+            <p class="lead mb-4">Track your finances and your transactions all in one place.</p>
             <div class="d-flex flex-wrap gap-2">
                 <a href="{{ url_for('add_account') }}" class="btn btn-primary">
                     <i class="bi bi-plus-circle me-2"></i>Add Bank Account
@@ -34,7 +34,7 @@
                 <a href="{{ url_for('counterparties') }}" class="btn btn-outline-primary">
                     <i class="bi bi-people me-2"></i>Counterparties
                 </a>
-                <a href="{{ url_for('auto_categorize') }}" class="btn btn-outline-secondary">
+                <a href="{{ url_for('auto_categorize') }}" class="btn btn-outline-warning">
                     <i class="bi bi-magic me-2"></i>Auto-Categorize
                 </a>
             </div>
@@ -60,15 +60,15 @@
                             <div>
                                 <h5 class="mb-1 d-flex align-items-center">
                                     <i class="bi bi-bank2 me-2"></i>
-                                    {{ account.bank_name }}
+                                    •••• {{account.account_number[-4:] }}
                                     {% if account.account_number in scraping_account_numbers %}
                                     <span class="badge bg-warning text-dark ms-2">
                                         <i class="bi bi-arrow-repeat me-1 spin"></i>Scraping
                                     </span>
                                     {% endif %}
                                 </h5>
-                                <p class="mb-1 text-body-secondary">Account: {{ account.account_number }}</p>
-                                <small class="text-body-secondary">Holder: {{ account.account_holder }}</small>
+                                <p class="mb-1 text-body-secondary">Holder: {{ account.account_holder }}</p>
+                                <small class="text-body-secondary">{{ account.bank_name }}</small>
                             </div>
                             <span class="badge bg-primary bg-opacity-10 text-primary p-2 rounded-3">
                                 {{ account.currency }} {{ "{:,.3f}".format(account.balance) }}
@@ -97,140 +97,135 @@
             </div>
             <div class="card-body">
                 {% if accounts %}
-                    <div class="d-flex gap-2 mb-4">
-                        <a href="{{ url_for('dashboard') }}?mode=email" class="btn btn-outline-primary w-50">
-                            <i class="bi bi-clipboard me-2"></i>Email Transactions
-                        </a>
-                        <a href="{{ url_for('dashboard') }}?mode=upload" class="btn btn-outline-primary w-50">
-                            <i class="bi bi-upload me-2"></i>Statement File
+                <div class="d-flex gap-2 mb-4">
+                    <a href="{{ url_for('dashboard') }}?mode=email" class="btn btn-outline-primary w-50" >
+                        <i class="bi bi-clipboard me-2"></i>Email Transactions
+                    </a>
+                    <a href="{{ url_for('dashboard') }}?mode=upload" class="btn btn-outline-primary w-50">
+                        <i class="bi bi-upload me-2"></i>Statement File
+                    </a>
+                </div>
+
+                {% if request.args.get('mode') == 'email' %}
+                <div class="manual-entry-form">
+                    {% if email_configs %}
+                    <h5 class="mb-3">Process Email Transactions</h5>
+
+                    <form id="email-form" action="{{ url_for('fetch_emails') }}" method="post" class="needs-validation" novalidate>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-4">
+                            <label for="email_account_number" class="form-label">Select Account</label>
+                            <select class="form-select form-select-lg" id="email_account_number" name="account_number" required>
+                                <option value="">Select an account</option>
+                                {% for account in accounts %}
+                                <option value="{{ account.account_number }}|{{ account.bank_name }}" {% if account.account_number in scraping_account_numbers %}disabled{% endif %}>
+                                    •••• {{ account.account_number[-4:] }} ({{ account.bank_name }})
+                                    {% if account.account_number in scraping_account_numbers %}(Scraping in progress...){% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="folder" class="form-label">Email Folder</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-folder"></i></span>
+                                <input type="text" class="form-control" id="folder" name="folder" value="INBOX">
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                <input type="checkbox" class="form-check-input" id="unread_only" name="unread_only" checked>
+                                <label class="form-check-label" for="unread_only">Only fetch unread emails</label>
+                            </div>
+                            <div class="form-check form-switch mt-2">
+                                <input type="checkbox" class="form-check-input" id="save_to_db" name="save_to_db" checked>
+                                <label class="form-check-label" for="save_to_db">Save transactions to database</label>
+                            </div>
+                            <div class="form-check form-switch mt-2">
+                                <input type="checkbox" class="form-check-input" id="email_preserve_balance" name="preserve_balance" checked>
+                                <label class="form-check-label" for="email_preserve_balance">Preserve initial account balance during first scrape</label>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info d-flex align-items-center mb-4" role="alert">
+                            <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+                            <div>
+                                <strong>Note:</strong> Fetching emails may take some time. You can continue using the website while emails are being processed.
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="bi bi-envelope me-2"></i>Fetch Emails
+                                <div class="spinner-border spinner-border-sm ms-2 d-none" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </button>
+                            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <div class="mb-4">
+                            <i class="bi bi-envelope-paper display-1 text-muted"></i>
+                        </div>
+                        <h2 class="h4 mb-3">No Email Configurations</h2>
+                        <p class="text-body-secondary mb-4">Add an email configuration to start parsing bank emails.</p>
+                        <a href="{{ url_for('add_email_config') }}" class="btn btn-primary">
+                            <i class="bi bi-plus-circle me-2"></i>Add Your First Configuration
                         </a>
                     </div>
-
-                    {% if request.args.get('mode') == 'email' %}
-                    <div class="manual-entry-form">
-                        {% if email_configs %}
-                            <h5 class="mb-3">Process Email Transactions</h5>
-
-                            <form action="{{ url_for('fetch_emails') }}" method="post" class="needs-validation" novalidate>
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="mb-4">
-                                <label for="email_account_number" class="form-label">Select Account</label>
-                                <select class="form-select form-select-lg" id="email_account_number" name="account_number" required>
-                                    <option value="">Select an account</option>
-                                    {% for account in accounts %}
-                                    <option value="{{ account.account_number }}|{{ account.bank_name }}" {% if account.account_number in scraping_account_numbers %}disabled{% endif %}>
-                                        {{ account.bank_name }} - {{ account.account_number }}
-                                        {% if account.account_number in scraping_account_numbers %}(Scraping in progress...){% endif %}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-
-                            <div class="mb-4">
-                                <label for="folder" class="form-label">Email Folder</label>
-                                <div class="input-group">
-                                    <span class="input-group-text"><i class="bi bi-folder"></i></span>
-                                    <input type="text" class="form-control" id="folder" name="folder" value="INBOX">
-                                </div>
-                            </div>
-
-                            <div class="mb-4">
-                                <div class="form-check form-switch">
-                                    <input type="checkbox" class="form-check-input" id="unread_only" name="unread_only" checked>
-                                    <label class="form-check-label" for="unread_only">Only fetch unread emails</label>
-                                </div>
-                                <div class="form-check form-switch mt-2">
-                                    <input type="checkbox" class="form-check-input" id="save_to_db" name="save_to_db" checked>
-                                    <label class="form-check-label" for="save_to_db">Save transactions to database</label>
-                                </div>
-                                <div class="form-check form-switch mt-2">
-                                    <input type="checkbox" class="form-check-input" id="preserve_balance" name="preserve_balance" checked>
-                                    <label class="form-check-label" for="preserve_balance">Preserve initial account balance during first scrape</label>
-                                </div>
-                            </div>
-
-                            <div class="alert alert-info d-flex align-items-center mb-4" role="alert">
-                                <i class="bi bi-info-circle-fill me-2 fs-5"></i>
-                                <div>
-                                    <strong>Note:</strong> Fetching emails may take some time. You can continue using the website while emails are being processed.
-                                </div>
-                            </div>
-
-                            <div class="d-grid gap-2">
-
-                                <button type="submit" class="btn btn-primary btn-lg">
-                                    <i class="bi bi-envelope me-2"></i>Fetch Emails
-                                    <div class="spinner-border spinner-border-sm ms-2 d-none" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                </button>
-                                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
-                            </div>
-
-                        </form>
-                        {% else %}
-                            <div class="text-center py-5">
-
-                                <div class="mb-4">
-                                    <i class="bi bi-envelope-paper display-1 text-muted"></i>
-                                </div>
-                                <h2 class="h4 mb-3">No Email Configurations</h2>
-                                <p class="text-body-secondary mb-4">Add an email configuration to start parsing bank emails.</p>
-                                <a href="{{ url_for('add_email_config') }}" class="btn btn-primary">
-                                    <i class="bi bi-plus-circle me-2"></i>Add Your First Configuration
-                                </a>
-                                </div>
-                            </div>
-                        {% endif %}
                     {% endif %}
+                </div>
+                {% endif %}
 
-                    {% if request.args.get('mode') == 'upload' %}
-                    <div class="manual-entry-form">
-                        <h5 class="mb-3">Upload Statement File</h5>
-                        <form action="{{ url_for('upload_pdf') }}" method="post" class="needs-validation" enctype="multipart/form-data" novalidate>
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% if request.args.get('mode') == 'upload' %}
+                <div class="manual-entry-form">
+                    <h5 class="mb-3">Upload Statement File</h5>
+                    <form id="pdf-form" action="{{ url_for('upload_pdf') }}" method="post" class="needs-validation" enctype="multipart/form-data" novalidate>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-                            <div class="mb-3">
-                                <label for="account_number" class="form-label">Account *</label>
-                                <select class="form-select" id="account_number" name="account_number" required>
-                                    <option value="">-- Select Account --</option>
-                                    {% for account in accounts %}
-                                        <option value="{{ account.account_number }}">{{ account.account_number }} ({{ account.bank_name }})</option>
-                                    {% endfor %}
-                                </select>
-                                <div class="form-text">Select the account for which you are uploading the statement.</div>
-                            </div>
+                        <div class="mb-3">
+                            <label for="account_number" class="form-label">Account *</label>
+                            <select class="form-select" id="account_number" name="account_number" required>
+                                <option value="">-- Select Account --</option>
+                                {% for account in accounts %}
+                                <option value="{{ account.account_number }}">•••• {{ account.account_number[-4:] }} ({{ account.bank_name }})</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Select the account for which you are uploading the statement.</div>
+                        </div>
 
-                            <div class="mb-3">
-                                <label for="pdf_file" class="form-label">PDF Statement *</label>
-                                <input type="file" class="form-control" id="pdf_file" name="pdf_file" accept=".pdf" required>
-                                <div class="form-text">Upload a PDF bank statement. The file must be in PDF format.</div>
-                            </div>
+                        <div class="mb-3">
+                            <label for="pdf_file" class="form-label">PDF Statement *</label>
+                            <input type="file" class="form-control" id="pdf_file" name="pdf_file" accept=".pdf" required>
+                            <div class="form-text">Upload a PDF bank statement. The file must be in PDF format.</div>
+                        </div>
 
-                            <div class="mb-3 form-check">
-                                <input type="checkbox" class="form-check-input" id="preserve_balance" name="preserve_balance">
-                                <label class="form-check-label" for="preserve_balance">Preserve account balance</label>
-                                <div class="form-text">Check this if you want to preserve the current account balance instead of updating it from the statement.</div>
-                            </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="upload_preserve_balance" name="preserve_balance">
+                            <label class="form-check-label" for="upload_preserve_balance">Preserve account balance</label>
+                            <div class="form-text">Check this if you want to preserve the current account balance instead of updating it from the statement.</div>
+                        </div>
 
-                            <div class="alert alert-info">
-                                <h5>Important Information</h5>
-                                <p>The PDF parser will extract transactions from your bank statement and add them to your account. Please ensure:</p>
-                                <ul>
-                                    <li>The PDF is a bank statement with transaction tables</li>
-                                    <li>The statement format matches the supported format</li>
-                                    <li>You've selected the correct account</li>
-                                </ul>
-                            </div>
+                        <div class="alert alert-info">
+                            <h5>Important Information</h5>
+                            <p>The PDF parser will extract transactions from your bank statement and add them to your account. Please ensure:</p>
+                            <ul>
+                                <li>The PDF is a bank statement with transaction tables</li>
+                                <li>You've selected the correct account</li>
+                            </ul>
+                        </div>
 
-                            <div class="d-grid gap-2">
-                                <button type="submit" class="btn btn-primary btn-lg">Upload and Process</button>
-                                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
-                            </div>
-                        </form>
-
-                    </div>
-                    {% endif %}
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">Upload and Process</button>
+                            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
 
                 {% else %}
                 <div class="text-center py-4">
@@ -248,34 +243,43 @@
 
     {% if accounts %}
     <div class="col-12">
+        <!-- Account Selection for Charts -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="mb-3">Chart Filters</h5>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="chart_account_filter" class="form-label">Filter by Account</label>
+                            <select class="form-select" id="chart_account_filter">
+                                <option value="all" selected>All Accounts</option>
+                                {% for account in accounts %}
+                                <option value="{{ account.account_number }}">{{ account.bank_name }} (•••• {{ account.account_number[-4:] }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="chart_date_filter" class="form-label">Filter by Date Range</label>
+                            <select class="form-select" id="chart_date_filter">
+                                <option value="overall" selected>Overall</option>
+                                <option value="2w">Last 2 Weeks</option>
+                                <option value="1m">Last Month</option>
+                                <option value="3m">Last 3 Months</option>
+                                <option value="6m">Last 6 Months</option>
+                                <option value="12m">Last 12 Months</option>
+                                <option value="24m">Last 24 Months</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <div class="row g-4">
-            <!-- Income vs Expense Chart -->
-            <div class="col-md-6 col-lg-3">
-                <div class="card h-100 chart-card">
-                    <div class="card-body">
-                        <h5 class="chart-title">Income vs Expense</h5>
-                        <p class="chart-description">Comparison of total income and expenses</p>
-                        <div class="chart-container">
-                            <canvas id="incomeExpenseChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <!-- Category Distribution Chart -->
-            <div class="col-md-6 col-lg-3">
-                <div class="card h-100 chart-card">
-                    <div class="card-body">
-                        <h5 class="chart-title">Expense Categories</h5>
-                        <p class="chart-description">Distribution of expenses by category</p>
-                        <div class="chart-container">
-                            <canvas id="categoryChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- Monthly Trend Chart -->
-            <div class="col-md-6 col-lg-3">
+            <div class="col-md-6 col-lg-6">
                 <div class="card h-100 chart-card">
                     <div class="card-body">
                         <h5 class="chart-title">Monthly Trends</h5>
@@ -286,9 +290,31 @@
                     </div>
                 </div>
             </div>
+            <!-- Category Distribution Chart -->
+            <div class="col-md-6 col-lg-6">
+                <div class="card h-100 chart-card">
+                    <div class="card-body">
+                            <h5 class="chart-title">Expense Categories</h5>
+                            <p class="chart-description">Distribution of expenses by category</p>
+                        {% if categories %}
+                            <div class="chart-container">
+                                <canvas id="categoryChart"></canvas>
+                            </div>
+                        {% else %}
+                              <div class="text-center py-5">
+                                <i class="bi bi-tags display-4 text-muted"></i>
+                                <p class="mt-3 mb-4">You don't have any categories yet.</p>
+                                <a href="{{ url_for('add_category') }}" class="btn btn-primary">
+                                    <i class="bi bi-plus-circle me-2"></i>Add Your First Category
+                                </a>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
 
             <!-- Account Balance Chart -->
-            <div class="col-md-6 col-lg-3">
+            <div class="col-md-6 col-lg-6">
                 <div class="card h-100 chart-card">
                     <div class="card-body">
                         <h5 class="chart-title">Account Balances</h5>
@@ -299,196 +325,67 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Income vs Expense Chart -->
+            <div class="col-md-6 col-lg-6">
+                <div class="card h-100 chart-card">
+                    <div class="card-body">
+                        <h5 class="chart-title">Income vs Expense</h5>
+                        <p class="chart-description">Comparison of total income and expenses</p>
+                        <div class="chart-container">
+                            <canvas id="incomeExpenseChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     {% endif %}
 
 </div>
+{% endblock %}
 
 {% block extra_css %}
-<style>
-    .welcome-section {
-        background: linear-gradient(135deg, var(--bs-primary-bg-subtle) 0%, var(--bs-secondary-bg-subtle) 100%);
-    }
-
-    .account-item {
-        background: var(--bs-body-bg);
-    }
-
-    .account-item:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-
-    [data-bs-theme="dark"] .account-item {
-        background: var(--bs-dark);
-    }
-
-    .form-check-input:checked {
-        background-color: var(--bs-primary);
-        border-color: var(--bs-primary);
-    }
-
-    /* Spinning animation for the scraping icon */
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-
-    .spin {
-        animation: spin 2s linear infinite;
-        display: inline-block;
-    }
-
-    /* Chart styles */
-    .chart-container {
-        position: relative;
-        height: 300px;
-        width: 100%;
-        margin-bottom: 1rem;
-    }
-
-    .chart-card {
-        transition: all 0.3s ease;
-    }
-
-    .chart-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-    }
-
-    .chart-title {
-        font-size: 1.1rem;
-        font-weight: 600;
-        margin-bottom: 0.5rem;
-    }
-
-    .chart-description {
-        font-size: 0.85rem;
-        color: var(--bs-secondary-color);
-        margin-bottom: 1rem;
-    }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 {% endblock %}
 
 {% block extra_js %}
 <!-- Include Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 
+<!-- Include custom JavaScript files -->
+<script src="{{ url_for('static', filename='js/forms.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ajax.js') }}"></script>
+
+<!-- Pass chart data to JavaScript -->
 <script>
-// Form validation
-(function () {
-    'use strict'
-    const forms = document.querySelectorAll('.needs-validation')
-    Array.from(forms).forEach(form => {
-        form.addEventListener('submit', event => {
-            if (!form.checkValidity()) {
-                event.preventDefault()
-                event.stopPropagation()
-            } else {
-                const submitBtn = form.querySelector('button[type="submit"]')
-                const spinner = submitBtn.querySelector('.spinner-border')
-                if (spinner) {
-                    spinner.classList.remove('d-none')
-                    submitBtn.disabled = true
+    // Store chart data in a global variable that can be accessed by charts.js
+    window.chartData = JSON.parse('{{ chart_data|default("{}")|safe }}');
+
+    // Initialize AJAX for transaction upload forms
+    document.addEventListener('DOMContentLoaded', function() {
+        // Email form AJAX handling
+        const emailForm = document.getElementById('email-form');
+        if (emailForm) {
+            Ajax.submitForm(emailForm, function(response) {
+                if (response.success) {
+                    Ajax.showNotification(response.message, 'success');
+                    // If there's a redirect URL, redirect after a short delay
+                    if (response.redirect) {
+                        setTimeout(function() {
+                            window.location.href = response.redirect;
+                        }, 2000);
+                    }
+                } else {
+                    Ajax.showNotification(response.message, 'error');
                 }
-            }
-            form.classList.add('was-validated')
-        }, false)
-    })
-})()
+            });
+        }
+
+        // PDF upload form is handled by initPdfUploadForm() in dashboard.js
+        // No need for duplicate event handler here
+    });
 </script>
-
-<!-- Initialize charts -->
-<script>
-// Initialize charts when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
-    // Get chart data from the server-side variable
-    var chartDataStr = '{{ chart_data|default("{}")|safe }}';
-    var chartData = JSON.parse(chartDataStr);
-
-    // Only proceed if we have chart data
-    if (chartData && Object.keys(chartData).length > 0) {
-        // 1. Income vs Expense Chart
-        if (chartData.income_expense && document.getElementById('incomeExpenseChart')) {
-            new Chart(document.getElementById('incomeExpenseChart'), {
-                type: 'doughnut',
-                data: chartData.income_expense,
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
-                        }
-                    }
-                }
-            });
-        }
-
-        // 2. Category Distribution Chart
-        if (chartData.category_distribution && document.getElementById('categoryChart')) {
-            new Chart(document.getElementById('categoryChart'), {
-                type: 'pie',
-                data: chartData.category_distribution,
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            display: false
-                        }
-                    }
-                }
-            });
-        }
-
-        // 3. Monthly Trend Chart
-        if (chartData.monthly_trend && document.getElementById('trendChart')) {
-            new Chart(document.getElementById('trendChart'), {
-                type: 'line',
-                data: chartData.monthly_trend,
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
-                        }
-                    }
-                }
-            });
-        }
-
-        // 4. Account Balance Chart
-        if (chartData.account_balance && document.getElementById('balanceChart')) {
-            new Chart(document.getElementById('balanceChart'), {
-                type: 'bar',
-                data: chartData.account_balance,
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    }
-                }
-            });
-        }
-    }
-});
-</script>
-{% endblock %}
 {% endblock %}

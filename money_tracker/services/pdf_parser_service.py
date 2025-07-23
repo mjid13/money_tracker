@@ -35,11 +35,17 @@ class PDFTableExtractor:
         """
         self.pdf_path = pdf_path
         self.doc = fitz.open(pdf_path)
+        # Cache for table structures and extracted tables
+        self._table_structures_cache = None
+        self._extracted_tables_cache = None
 
     def get_table_structures(self) -> Dict[str, Dict[str, List[Dict[str, Any]]]]:
         """
         Returns the predefined table structures for both tables on page one and other pages
         """
+        # Return cached structures if available
+        if self._table_structures_cache is not None:
+            return self._table_structures_cache
         # Page one table structures
         page_one_table_one = [
             {'type': 'rectangle', 'x1': 60.69945526123047, 'y1': 428.2039489746094, 'x2': 868.6990356445312, 'y2': 496.1959533691406},
@@ -120,7 +126,8 @@ class PDFTableExtractor:
             {'type': 'line', 'x1': 56.1870002746582, 'y1': 405.69952392578125, 'x2': 859.968994140625, 'y2': 405.69952392578125}
         ]
 
-        return {
+        # Create the structures dictionary
+        structures = {
             'page_one': {
                 'table_one': page_one_table_one,
                 'table_two': page_one_table_two
@@ -130,6 +137,11 @@ class PDFTableExtractor:
                 'table_two': other_pages_table_two
             }
         }
+        
+        # Cache the structures
+        self._table_structures_cache = structures
+        
+        return structures
 
     def get_column_boundaries(self, table_structure):
         table_bounds = get_table_bounds(table_structure)
@@ -222,6 +234,9 @@ class PDFTableExtractor:
         - first_table: DataFrame with first table data (same across all pages, so only one instance)
         - second_table: DataFrame with all second table data from all pages combined
         """
+        # Return cached tables if available
+        if self._extracted_tables_cache is not None:
+            return self._extracted_tables_cache
         structs = self.get_table_structures()
 
         # For first table - we only need it once since it's the same across all pages
@@ -230,6 +245,9 @@ class PDFTableExtractor:
         # For second table - collect all data from all pages
         second_table_data = []
         second_table_columns = None
+        
+        # Track processed pages to avoid duplicate logging
+        processed_pages = set()
 
         for page_num in range(len(self.doc)):
             page = self.doc[page_num]
@@ -246,7 +264,10 @@ class PDFTableExtractor:
             if first_table_df is None:
                 table_one_cells = self.extract_text_from_table_cells(page, table_one_struct)
                 first_table_df = self.organize_table_data(table_one_cells)
-                logger.info(f"First table extracted from page {page_num + 1}")
+                # Only log once per page
+                if page_num not in processed_pages:
+                    logger.info(f"First table extracted from page {page_num + 1}")
+                    processed_pages.add(page_num)
 
             # Extract second table from all pages
             table_two_cells = self.extract_text_from_table_cells(page, table_two_struct)
@@ -266,7 +287,10 @@ class PDFTableExtractor:
                     table_two_df = table_two_df.iloc[1:].reset_index(drop=True)
 
                 second_table_data.append(table_two_df)
-                logger.info(f"Second table extracted from page {page_num + 1}")
+                # Only log once per page
+                if page_num not in processed_pages:
+                    logger.info(f"Second table extracted from page {page_num + 1}")
+                    processed_pages.add(page_num)
 
         # Combine all second table data
         if second_table_data:
@@ -274,14 +298,21 @@ class PDFTableExtractor:
         else:
             combined_second_table = pd.DataFrame()
 
-        return {
+        # Create the tables dictionary
+        tables = {
             'first_table': first_table_df if first_table_df is not None else pd.DataFrame(),
             'second_table': combined_second_table
         }
+        
+        # Cache the extracted tables
+        self._extracted_tables_cache = tables
+        
+        return tables
 
     def save_tables_to_excel(self, output_path: str):
         """Save extracted tables to Excel file with separate sheets"""
-        tables = self.extract_tables_from_pdf()
+        # Use get_dataframes() to leverage caching
+        tables = self.get_dataframes()
 
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
             if not tables['first_table'].empty:
@@ -296,6 +327,10 @@ class PDFTableExtractor:
 
     def get_dataframes(self) -> Dict[str, pd.DataFrame]:
         """Return the extracted DataFrames directly"""
+        # If tables are already extracted, return the cached results
+        # Otherwise, extract them (which will also cache the results)
+        if self._extracted_tables_cache is not None:
+            return self._extracted_tables_cache
         return self.extract_tables_from_pdf()
 
     def close(self):

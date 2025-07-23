@@ -29,7 +29,7 @@
                         <select class="form-select" id="account_number" name="account_number" required>
                             <option value="">-- Select Account --</option>
                             {% for account in accounts %}
-                                <option value="{{ account.account_number }}">{{ account.account_number }} ({{ account.bank_name }})</option>
+                                <option value="{{ account.account_number }}">•••• {{ account.account_number[-4:] }} ({{ account.bank_name }})</option>
                             {% endfor %}
                         </select>
                         <div class="form-text">Select the account for which you are uploading the statement.</div>
@@ -52,7 +52,6 @@
                         <p>The PDF parser will extract transactions from your bank statement and add them to your account. Please ensure:</p>
                         <ul>
                             <li>The PDF is a bank statement with transaction tables</li>
-                            <li>The statement format matches the supported format</li>
                             <li>You've selected the correct account</li>
                         </ul>
                     </div>

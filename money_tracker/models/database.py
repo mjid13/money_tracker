@@ -173,6 +173,29 @@ class Database:
                                 # At this point, we've tried everything and failed
                                 # The application will likely encounter errors when trying to use this column
 
+            # Check if transactions table has counterparty_id column
+            if 'transactions' in inspector.get_table_names():
+                columns = [column['name'] for column in inspector.get_columns('transactions')]
+                if 'counterparty_id' not in columns:
+                    try:
+                        # Add counterparty_id column to transactions table
+                        from sqlalchemy.sql import text
+                        with self.engine.connect() as connection:
+                            # Add counterparty_id column with NULL default value
+                            connection.execute(text("ALTER TABLE transactions ADD COLUMN counterparty_id INTEGER REFERENCES counterparties(id)"))
+                            connection.commit()
+                        logger.info("Added counterparty_id column to transactions table")
+                    except Exception as e:
+                        logger.error(f"Error adding counterparty_id column to transactions table: {str(e)}")
+                        # This might fail if counterparties table doesn't exist yet, which is fine
+            
+            # Migrate existing counterparty data
+            try:
+                self.migrate_counterparty_data()
+            except Exception as e:
+                logger.error(f"Error migrating counterparty data: {str(e)}")
+                # Continue even if migration fails
+            
             logger.info("Database tables created")
             return True
         except Exception as e:
@@ -189,6 +212,84 @@ class Database:
         if not self.Session:
             self.connect()
         return self.Session()
+
+    def migrate_counterparty_data(self):
+        """
+        Migrate existing counterparty data from transactions to the new counterparty table.
+        This creates counterparty records and updates transaction.counterparty_id references.
+        """
+        try:
+            logger.info("Starting migration of counterparty data")
+            from sqlalchemy.sql import text
+            from sqlalchemy.orm import Session
+            
+            # Get a session
+            session = self.get_session()
+            
+            try:
+                # Get all unique counterparty names from transactions
+                result = session.execute(text("""
+                    SELECT DISTINCT counterparty_name 
+                    FROM transactions 
+                    WHERE counterparty_name IS NOT NULL AND counterparty_name != ''
+                """))
+                
+                counterparty_names = [row[0] for row in result]
+                logger.info(f"Found {len(counterparty_names)} unique counterparties to migrate")
+                
+                # Create counterparty records for each unique name
+                counterparty_id_map = {}  # Map of counterparty_name to id
+                
+                for name in counterparty_names:
+                    # Check if counterparty already exists
+                    existing = session.execute(
+                        text("SELECT id FROM counterparties WHERE name = :name"),
+                        {"name": name}
+                    ).fetchone()
+                    
+                    if existing:
+                        counterparty_id = existing[0]
+                        logger.info(f"Counterparty '{name}' already exists with ID {counterparty_id}")
+                    else:
+                        # Insert new counterparty
+                        result = session.execute(
+                            text("""
+                                INSERT INTO counterparties (name, created_at, updated_at) 
+                                VALUES (:name, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                                RETURNING id
+                            """),
+                            {"name": name}
+                        )
+                        counterparty_id = result.fetchone()[0]
+                        logger.info(f"Created new counterparty '{name}' with ID {counterparty_id}")
+                    
+                    counterparty_id_map[name] = counterparty_id
+                
+                # Update transactions to reference counterparties
+                for name, counterparty_id in counterparty_id_map.items():
+                    session.execute(
+                        text("""
+                            UPDATE transactions 
+                            SET counterparty_id = :counterparty_id 
+                            WHERE counterparty_name = :name
+                        """),
+                        {"counterparty_id": counterparty_id, "name": name}
+                    )
+                    logger.info(f"Updated transactions for counterparty '{name}' to reference ID {counterparty_id}")
+                
+                # Commit all changes
+                session.commit()
+                logger.info("Counterparty data migration completed successfully")
+                
+            except Exception as e:
+                session.rollback()
+                logger.error(f"Error during counterparty data migration: {str(e)}")
+                raise
+            finally:
+                self.close_session(session)
+                
+        except Exception as e:
+            logger.error(f"Failed to migrate counterparty data: {str(e)}")
 
     def close_session(self, session):
         """
