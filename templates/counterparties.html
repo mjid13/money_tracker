@@ -13,15 +13,37 @@
             <i class="bi bi-magic me-2"></i>Auto-Categorize All
         </a>
     </div>
-
-    <div class="card">
-        <div class="card-body">
-            <div class="alert alert-info mb-4">
+          <div class="alert alert-info mb-4">
                 <h5 class="alert-heading"><i class="bi bi-info-circle me-2"></i>About Counterparties</h5>
                 <p class="mb-0">Counterparties are the people or businesses you transact with.
                     Each unique combination of counterparty name and description is listed here.
                     You can categorize them to automatically organize your transactions.</p>
             </div>
+    <!-- Account Filter -->
+    {% if accounts %}
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="account_filter" class="form-label">Choice Account</label>
+                        <select class="form-select" id="account_filter">
+                            <option value="all" {% if selected_account == 'all' %}selected{% endif %}>All Accounts</option>
+                            {% for account in accounts %}
+                            <option value="{{ account.account_number }}" {% if selected_account == account.account_number %}selected{% endif %}>
+                                {{ account.bank_name }} (•••• {{ account.account_number[-4:] }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-body">
 
             {% if counterparties %}
             <div class="table-responsive">
@@ -196,6 +218,14 @@
                         console.error('Error:', error);
                         alert('An error occurred while categorizing the counterparty');
                     });
+            });
+        }
+        
+        // Add event listener for account filter
+        var accountFilter = document.getElementById('account_filter');
+        if (accountFilter) {
+            accountFilter.addEventListener('change', function() {
+                window.location.href = "{{ url_for('counterparties') }}?account_number=" + this.value;
             });
         }
     });

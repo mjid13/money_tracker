@@ -23,12 +23,13 @@ class CounterpartyService:
         self.db.create_tables()
         self.category_service = CategoryService()
 
-    def get_unique_counterparties(self, user_id: int) -> List[Dict[str, Any]]:
+    def get_unique_counterparties(self, user_id: int, account_number: str = None) -> List[Dict[str, Any]]:
         """
-        Get all unique counterparties for a user.
+        Get all unique counterparties for a user, optionally filtered by account.
 
         Args:
             user_id (int): User ID.
+            account_number (str, optional): Account number to filter by.
 
         Returns:
             List[Dict[str, Any]]: List of unique counterparties with their categories.
@@ -52,7 +53,16 @@ class CounterpartyService:
                     Account, Account.id == Transaction.account_id
                 ).filter(
                     Account.user_id == user_id
-                ).group_by(
+                )
+                
+                # Filter by account_number if provided
+                if account_number and account_number != 'all':
+                    counterparties_query = counterparties_query.filter(
+                        Account.account_number == account_number
+                    )
+                    
+                # Group by counterparty ID
+                counterparties_query = counterparties_query.group_by(
                     Counterparty.id
                 )
                 
