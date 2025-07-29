@@ -22,7 +22,7 @@ BANK_EMAIL_ADDRESSES = os.getenv('BANK_EMAIL_ADDRESSES', 'bankmuscat@bankmuscat.
 BANK_EMAIL_SUBJECTS = os.getenv('BANK_EMAIL_SUBJECTS', 'transaction,alert,notification').split(',')
 
 # Database settings
-# Replace 'postgres://' with 'postgresql://' to ensure compatibility with libraries like SQLAlchemy.
+# Replace 'postgres://' with 'postgresql://' to ensure compatibility with libraries like SQLAlchemy and other tools.
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///transactions.db').replace(
         'postgres://', 'postgresql://'
     )
