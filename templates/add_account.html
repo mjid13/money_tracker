@@ -2,6 +2,38 @@
 
 {% block title %}Add Bank Account - Bank Email Parser{% endblock %}
 
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Get the bank_id and currency elements
+    const bankSelect = document.getElementById('bank_id');
+    const currencyInput = document.getElementById('currency');
+    const bankNameInput = document.getElementById('bank_name');
+    
+    // Add event listener to update currency when bank is selected
+    bankSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        
+        if (selectedOption.value) {
+            // Get currency from data attribute
+            const currency = selectedOption.getAttribute('data-currency');
+            currencyInput.value = currency;
+            
+            // Disable bank_name field when a bank is selected
+            bankNameInput.disabled = true;
+            bankNameInput.value = '';
+        } else {
+            // Reset currency to default
+            currencyInput.value = 'OMR';
+            
+            // Enable bank_name field when no bank is selected
+            bankNameInput.disabled = false;
+        }
+    });
+});
+</script>
+{% endblock %}
+
 {% block content %}
 <div class="row">
     <div class="col-md-12">
@@ -30,9 +62,20 @@
                     </div>
 
                     <div class="mb-3">
-                        <label for="bank_name" class="form-label">Bank Name *</label>
-                        <input type="text" class="form-control" id="bank_name" name="bank_name" required>
-                        <div class="form-text">Enter the name of your bank.</div>
+                        <label for="bank_id" class="form-label">Bank *</label>
+                        <select class="form-select" id="bank_id" name="bank_id" required>
+                            <option value="">-- Select a Bank --</option>
+                            {% for bank in banks %}
+                                <option value="{{ bank.id }}" data-currency="{{ bank.currency }}">{{ bank.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Select your bank from the list.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="bank_name" class="form-label">Other Bank Name</label>
+                        <input type="text" class="form-control" id="bank_name" name="bank_name" disabled>
+                        <div class="form-text">If your bank is not in the list, please contact support to add it.</div>
                     </div>
 
                     <div class="mb-3">
@@ -49,8 +92,8 @@
 
                     <div class="mb-3">
                         <label for="currency" class="form-label">Currency</label>
-                        <input type="text" class="form-control" id="currency" name="currency" value="OMR">
-                        <div class="form-text">Enter the currency of your account.</div>
+                        <input type="text" class="form-control" id="currency" name="currency" value="OMR" readonly>
+                        <div class="form-text">Currency is automatically set based on the selected bank.</div>
                     </div>
 
                     <div class="mb-3">

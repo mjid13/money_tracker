@@ -65,6 +65,12 @@ class Database:
 
             # Create all tables that don't exist
             Base.metadata.create_all(self.engine)
+            
+            # Initialize email service providers
+            self._initialize_email_providers()
+            
+            # Initialize banks
+            self._initialize_banks()
 
             # Tables that need user_id column
             tables_to_check = ['accounts', 'email_configurations', 'email_metadata']
@@ -188,6 +194,29 @@ class Database:
                     except Exception as e:
                         logger.error(f"Error adding counterparty_id column to transactions table: {str(e)}")
                         # This might fail if counterparties table doesn't exist yet, which is fine
+                        
+            # Check if accounts table has bank_id column
+            if 'accounts' in inspector.get_table_names():
+                columns = [column['name'] for column in inspector.get_columns('accounts')]
+                if 'bank_id' not in columns:
+                    try:
+                        # Add bank_id column to accounts table
+                        from sqlalchemy.sql import text
+                        with self.engine.connect() as connection:
+                            # Add bank_id column with NULL default value
+                            connection.execute(text("ALTER TABLE accounts ADD COLUMN bank_id INTEGER REFERENCES banks(id)"))
+                            connection.commit()
+                        logger.info("Added bank_id column to accounts table")
+                    except Exception as e:
+                        logger.error(f"Error adding bank_id column to accounts table: {str(e)}")
+                        # If the first attempt fails, try without the foreign key constraint
+                        try:
+                            with self.engine.connect() as connection:
+                                connection.execute(text("ALTER TABLE accounts ADD COLUMN bank_id INTEGER"))
+                                connection.commit()
+                            logger.info("Added bank_id column to accounts table (without foreign key constraint)")
+                        except Exception as e2:
+                            logger.error(f"All attempts to add bank_id column to accounts table failed: {str(e2)}")
             
             # Migrate existing counterparty data
             # try:
@@ -195,6 +224,76 @@ class Database:
             # except Exception as e:
             #     logger.error(f"Error migrating counterparty data: {str(e)}")
             #     # Continue even if migration fails
+            
+            # Check if email_configurations table has service_provider_id column
+            if 'email_configurations' in inspector.get_table_names():
+                columns = [column['name'] for column in inspector.get_columns('email_configurations')]
+                if 'service_provider_id' not in columns:
+                    try:
+                        # Add service_provider_id column to email_configurations table
+                        from sqlalchemy.sql import text
+                        with self.engine.connect() as connection:
+                            # Add service_provider_id column with NULL default value
+                            connection.execute(text("ALTER TABLE email_configurations ADD COLUMN service_provider_id INTEGER REFERENCES email_service_providers(id)"))
+                            connection.commit()
+                        logger.info("Added service_provider_id column to email_configurations table")
+                    except Exception as e:
+                        logger.error(f"Error adding service_provider_id column to email_configurations table: {str(e)}")
+                        # If the first attempt fails, try without the foreign key constraint
+                        try:
+                            with self.engine.connect() as connection:
+                                connection.execute(text("ALTER TABLE email_configurations ADD COLUMN service_provider_id INTEGER"))
+                                connection.commit()
+                            logger.info("Added service_provider_id column to email_configurations table (without foreign key constraint)")
+                        except Exception as e2:
+                            logger.error(f"All attempts to add service_provider_id column failed: {str(e2)}")
+                            
+                # Check if email_configurations table has bank_id column
+                if 'bank_id' not in columns:
+                    try:
+                        # Add bank_id column to email_configurations table
+                        from sqlalchemy.sql import text
+                        with self.engine.connect() as connection:
+                            # Add bank_id column with NULL default value
+                            connection.execute(text("ALTER TABLE email_configurations ADD COLUMN bank_id INTEGER REFERENCES banks(id)"))
+                            connection.commit()
+                        logger.info("Added bank_id column to email_configurations table")
+                    except Exception as e:
+                        logger.error(f"Error adding bank_id column to email_configurations table: {str(e)}")
+                        # If the first attempt fails, try without the foreign key constraint
+                        try:
+                            with self.engine.connect() as connection:
+                                connection.execute(text("ALTER TABLE email_configurations ADD COLUMN bank_id INTEGER"))
+                                connection.commit()
+                            logger.info("Added bank_id column to email_configurations table (without foreign key constraint)")
+                        except Exception as e2:
+                            logger.error(f"All attempts to add bank_id column to email_configurations table failed: {str(e2)}")
+            
+            # Check if email_config_banks table exists and create it if it doesn't
+            if 'email_config_banks' not in inspector.get_table_names():
+                try:
+                    # Create the email_config_banks table
+                    from money_tracker.models.models import EmailConfigBank
+                    Base.metadata.create_all(self.engine, tables=[EmailConfigBank.__table__])
+                    logger.info("Created email_config_banks table")
+                    
+                    # Migrate existing bank_id values from email_configurations to email_config_banks
+                    try:
+                        from sqlalchemy.sql import text
+                        with self.engine.connect() as connection:
+                            # Insert records into email_config_banks for existing relationships
+                            connection.execute(text("""
+                                INSERT INTO email_config_banks (email_config_id, bank_id, created_at)
+                                SELECT id, bank_id, CURRENT_TIMESTAMP
+                                FROM email_configurations
+                                WHERE bank_id IS NOT NULL
+                            """))
+                            connection.commit()
+                        logger.info("Migrated existing bank_id values to email_config_banks table")
+                    except Exception as e:
+                        logger.error(f"Error migrating bank_id values to email_config_banks table: {str(e)}")
+                except Exception as e:
+                    logger.error(f"Error creating email_config_banks table: {str(e)}")
             
             logger.info("Database tables created")
             return True
@@ -290,6 +389,166 @@ class Database:
                 
         except Exception as e:
             logger.error(f"Failed to migrate counterparty data: {str(e)}")
+
+    def _initialize_email_providers(self):
+        """
+        Initialize the email_service_providers table with common email providers.
+        This method is called when the application starts to ensure the table has the necessary data.
+        """
+        try:
+            from money_tracker.models.models import EmailServiceProvider
+            
+            # Create a session
+            session = self.get_session()
+            
+            # Common email providers
+            providers = [
+                {
+                    "provider_name": "gmail",
+                    "host": "imap.gmail.com",
+                    "port": 993,
+                    "use_ssl": True
+                },
+                {
+                    "provider_name": "outlook",
+                    "host": "outlook.office365.com",
+                    "port": 993,
+                    "use_ssl": True
+                },
+                {
+                    "provider_name": "yahoo",
+                    "host": "imap.mail.yahoo.com",
+                    "port": 993,
+                    "use_ssl": True
+                },
+                {
+                    "provider_name": "aol",
+                    "host": "imap.aol.com",
+                    "port": 993,
+                    "use_ssl": True
+                },
+                {
+                    "provider_name": "zoho",
+                    "host": "imap.zoho.com",
+                    "port": 993,
+                    "use_ssl": True
+                },
+                {
+                    "provider_name": "icloud",
+                    "host": "imap.mail.me.com",
+                    "port": 993,
+                    "use_ssl": True
+                },
+                {
+                    "provider_name": "protonmail",
+                    "host": "imap.protonmail.ch",
+                    "port": 993,
+                    "use_ssl": True
+                }
+            ]
+            
+            # Check if providers already exist
+            for provider_data in providers:
+                provider = session.query(EmailServiceProvider).filter_by(
+                    provider_name=provider_data["provider_name"]
+                ).first()
+                
+                if not provider:
+                    # Create new provider
+                    provider = EmailServiceProvider(**provider_data)
+                    session.add(provider)
+                    logger.info(f"Added email service provider: {provider_data['provider_name']}")
+                else:
+                    # Update existing provider
+                    for key, value in provider_data.items():
+                        setattr(provider, key, value)
+                    logger.info(f"Updated email service provider: {provider_data['provider_name']}")
+            
+            # Commit changes
+            session.commit()
+            logger.info("Email service providers initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Error initializing email service providers: {str(e)}")
+            if session:
+                session.rollback()
+        finally:
+            if session:
+                session.close()
+                
+    def _initialize_banks(self):
+        """
+        Initialize the banks table with common banks.
+        This method is called when the application starts to ensure the table has the necessary data.
+        """
+        try:
+            from money_tracker.models.models import Bank
+            
+            # Create a session
+            session = self.get_session()
+            
+            # Common banks with their email configurations
+            banks = [
+                {
+                    "name": "Bank Muscat",
+                    "email_address": "noreply@bankmuscat.com",
+                    "email_subjects": "Account Transaction",
+                    "currency": "OMR"
+                },
+                {
+                    "name": "HSBC",
+                    "email_address": "alerts@hsbc.com",
+                    "email_subjects": "Transaction Alert,Account Activity",
+                    "currency": "USD"
+                },
+                {
+                    "name": "Citibank",
+                    "email_address": "alerts@citibank.com",
+                    "email_subjects": "Transaction Notification,Account Alert",
+                    "currency": "USD"
+                },
+                {
+                    "name": "Bank of America",
+                    "email_address": "alerts@bankofamerica.com",
+                    "email_subjects": "Transaction Alert,Account Activity",
+                    "currency": "USD"
+                },
+                {
+                    "name": "Chase",
+                    "email_address": "no-reply@alertsp.chase.com",
+                    "email_subjects": "Chase Alert,Transaction Notification",
+                    "currency": "USD"
+                }
+            ]
+            
+            # Check if banks already exist
+            for bank_data in banks:
+                bank = session.query(Bank).filter_by(
+                    name=bank_data["name"]
+                ).first()
+                
+                if not bank:
+                    # Create new bank
+                    bank = Bank(**bank_data)
+                    session.add(bank)
+                    logger.info(f"Added bank: {bank_data['name']}")
+                else:
+                    # Update existing bank
+                    for key, value in bank_data.items():
+                        setattr(bank, key, value)
+                    logger.info(f"Updated bank: {bank_data['name']}")
+            
+            # Commit changes
+            session.commit()
+            logger.info("Banks initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Error initializing banks: {str(e)}")
+            if 'session' in locals():
+                session.rollback()
+        finally:
+            if 'session' in locals():
+                session.close()
 
     def close_session(self, session):
         """

@@ -127,22 +127,20 @@
                         </div>
 
                         <div class="mb-4">
-                            <label for="folder" class="form-label">Email Folder</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bi bi-folder"></i></span>
-                                <input type="text" class="form-control" id="folder" name="folder" value="INBOX">
-                            </div>
+                            <label for="time_period" class="form-label">Email Time Period</label>
+                            <select class="form-select" id="time_period" name="time_period">
+                                <option value="only_unread" selected>Only unread emails</option>
+                                <option value="last_week">Last week </option>
+                                <option value="last_2_weeks">Last 2 weeks </option>
+                                <option value="last_month">Last month</option>
+                                <option value="last_3_months">Last 3 months</option>
+                                <option value="last_6_months">Last 6 months</option>
+                                <option value="last_year">Last year</option>
+                            </select>
+                            <div class="form-text">Select the time period for which to fetch emails. All emails (both read and unread) will be fetched except for "Only unread emails" option.</div>
                         </div>
 
                         <div class="mb-4">
-                            <div class="form-check form-switch">
-                                <input type="checkbox" class="form-check-input" id="unread_only" name="unread_only" checked>
-                                <label class="form-check-label" for="unread_only">Only fetch unread emails</label>
-                            </div>
-                            <div class="form-check form-switch mt-2">
-                                <input type="checkbox" class="form-check-input" id="save_to_db" name="save_to_db" checked>
-                                <label class="form-check-label" for="save_to_db">Save transactions to database</label>
-                            </div>
                             <div class="form-check form-switch mt-2">
                                 <input type="checkbox" class="form-check-input" id="email_preserve_balance" name="preserve_balance" checked>
                                 <label class="form-check-label" for="email_preserve_balance">Preserve initial account balance during first scrape</label>

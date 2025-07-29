@@ -57,9 +57,28 @@ function initDashboardCharts(chartData) {
                 plugins: {
                     legend: {
                         position: 'bottom',
-                        display: false
+                        display: true,
+                        labels: {
+                            usePointStyle: true,  // Uses circular markers instead of rectangles
+                            padding: 20,          // Adds space between legend items
+                            font: {
+                                size: 12            // Adjusts font size
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
                     }
                 }
+
             }
         });
     }

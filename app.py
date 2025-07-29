@@ -26,7 +26,7 @@ from money_tracker.services.email_service import EmailService
 from money_tracker.services.counterparty_service import CounterpartyService
 from money_tracker.services.pdf_parser_service import PDFParser
 from money_tracker.models.database import Database
-from money_tracker.models.models import TransactionRepository, User, Account, EmailConfiguration, Transaction, Category, CategoryMapping, CategoryType
+from money_tracker.models.models import TransactionRepository, User, Account, EmailConfiguration, Transaction, Category, CategoryMapping, CategoryType, Bank
 from money_tracker.config import settings
 
 # Setup logging
@@ -69,7 +69,7 @@ def allowed_file(filename):
 # Format: {account_number: {'user_id': user_id, 'task_id': task_id, 'start_time': time.time()}}
 scraping_accounts = {}
 
-def process_emails_task(task_id, user_id, account_number, bank_name, folder, unread_only, save_to_db, preserve_balance):
+def process_emails_task(task_id, user_id, account_number, bank_name, folder, time_period, save_to_db, preserve_balance):
     """Background task for processing emails."""
     logger.debug(f"Starting background task {task_id} for user {user_id} on account {account_number}")
 
@@ -150,7 +150,7 @@ def process_emails_task(task_id, user_id, account_number, bank_name, folder, unr
             return
 
         # Get bank emails
-        emails = email_service.get_bank_emails(folder=folder, unread_only=unread_only)
+        emails = email_service.get_bank_emails(folder=folder, time_period=time_period)
         logger.debug(f"Fetched {len(emails)} emails for account {account_number} in folder '{folder}'")
 
         if not emails:
@@ -594,30 +594,50 @@ def add_account():
         email_configs = db_session.query(EmailConfiguration).filter(
             EmailConfiguration.user_id == user_id
         ).all()
+        
+        # Get all available banks
+        banks = db_session.query(Bank).all()
 
         if request.method == 'POST':
             account_number = request.form.get('account_number')
-            bank_name = request.form.get('bank_name')
+            bank_id = request.form.get('bank_id')
             account_holder = request.form.get('account_holder')
             balance = request.form.get('balance', 0.0)
             currency = request.form.get('currency', 'OMR')
             email_config_id = request.form.get('email_config_id')
 
-            if not account_number or not bank_name:
-                flash('Account number and bank name are required', 'error')
-                return render_template('add_account.html', email_configs=email_configs)
+            if not account_number:
+                flash('Account number is required', 'error')
+                return render_template('add_account.html', email_configs=email_configs, banks=banks)
+                
+            # Get bank information
+            bank_name = None
+            if bank_id:
+                try:
+                    bank = db_session.query(Bank).filter_by(id=int(bank_id)).first()
+                    if bank:
+                        bank_name = bank.name
+                        currency = bank.currency
+                except ValueError:
+                    flash('Invalid bank selected', 'error')
+                    return render_template('add_account.html', email_configs=email_configs, banks=banks)
+            
+            if not bank_name:
+                flash('Please select a valid bank', 'error')
+                return render_template('add_account.html', email_configs=email_configs, banks=banks)
 
             # Validate balance
             try:
                 balance_float = float(balance) if balance else 0.0
             except ValueError:
                 flash('Balance must be a valid number', 'error')
-                return render_template('add_account.html', email_configs=email_configs)
+                return render_template('add_account.html', email_configs=email_configs, banks=banks)
 
             # Create account data
             account_data = {
                 'user_id': user_id,
                 'account_number': account_number,
+                'bank_id': int(bank_id) if bank_id else None,
                 'bank_name': bank_name,
                 'account_holder': account_holder,
                 'balance': balance_float,
@@ -630,7 +650,7 @@ def add_account():
                     account_data['email_config_id'] = int(email_config_id)
                 except ValueError:
                     flash('Invalid email configuration selected', 'error')
-                    return render_template('add_account.html', email_configs=email_configs)
+                    return render_template('add_account.html', email_configs=email_configs, banks=banks)
 
             account = TransactionRepository.create_account(db_session, account_data)
             if account:
@@ -638,13 +658,13 @@ def add_account():
                 return redirect(url_for('dashboard'))
             else:
                 flash('Error adding account', 'error')
-                return render_template('add_account.html', email_configs=email_configs)
+                return render_template('add_account.html', email_configs=email_configs, banks=banks)
 
-        return render_template('add_account.html', email_configs=email_configs)
+        return render_template('add_account.html', email_configs=email_configs, banks=banks)
     except Exception as e:
         logger.error(f"Error adding account: {str(e)}")
         flash('Error adding account. Please try again.', 'error')
-        return render_template('add_account.html', email_configs=[])
+        return render_template('add_account.html', email_configs=[], banks=[])
     finally:
         db.close_session(db_session)
 
@@ -669,13 +689,41 @@ def edit_account(account_id):
         email_configs = db_session.query(EmailConfiguration).filter(
             EmailConfiguration.user_id == user_id
         ).all()
+        
+        # Get all available banks
+        banks = db_session.query(Bank).all()
 
         if request.method == 'POST':
             account.account_number = request.form.get('account_number')
-            account.bank_name = request.form.get('bank_name')
-            account.account_holder = request.form.get('account_holder')
-            account.balance = float(request.form.get('balance', 0.0))
-            account.currency = request.form.get('currency', 'OMR')
+            account_holder = request.form.get('account_holder')
+            balance = request.form.get('balance', 0.0)
+            
+            # Handle bank selection
+            bank_id = request.form.get('bank_id')
+            if bank_id:
+                try:
+                    bank = db_session.query(Bank).filter_by(id=int(bank_id)).first()
+                    if bank:
+                        account.bank_id = int(bank_id)
+                        account.bank_name = bank.name
+                        account.currency = bank.currency
+                    else:
+                        flash('Selected bank not found', 'error')
+                        return render_template('edit_account.html', account=account, email_configs=email_configs, banks=banks)
+                except ValueError:
+                    flash('Invalid bank selected', 'error')
+                    return render_template('edit_account.html', account=account, email_configs=email_configs, banks=banks)
+            else:
+                flash('Please select a valid bank', 'error')
+                return render_template('edit_account.html', account=account, email_configs=email_configs, banks=banks)
+            
+            # Update other fields
+            account.account_holder = account_holder
+            try:
+                account.balance = float(balance)
+            except ValueError:
+                flash('Balance must be a valid number', 'error')
+                return render_template('edit_account.html', account=account, email_configs=email_configs, banks=banks)
 
             # Update email_config_id
             email_config_id = request.form.get('email_config_id')
@@ -688,7 +736,7 @@ def edit_account(account_id):
             flash('Account updated successfully', 'success')
             return redirect(url_for('dashboard'))
 
-        return render_template('edit_account.html', account=account, email_configs=email_configs)
+        return render_template('edit_account.html', account=account, email_configs=email_configs, banks=banks)
     except Exception as e:
         logger.error(f"Error editing account: {str(e)}")
         flash(f'Error editing account: {str(e)}', 'error')
@@ -828,27 +876,108 @@ def add_email_config():
     db_session = db.get_session()
 
     try:
+        # Get all available banks
+        banks = db_session.query(Bank).all()
+        
         if request.method == 'POST':
+            email_username = request.form.get('email_username')
+            
+            # Extract provider from email
+            provider_name = EmailService.extract_provider_from_email(email_username)
+            
+            # Get provider configuration if available
+            provider_config = None
+            if provider_name:
+                provider_config = EmailService.get_provider_config(db_session, provider_name)
+                
+                # Get the provider record to set the relationship
+                from money_tracker.models.models import EmailServiceProvider
+                provider = db_session.query(EmailServiceProvider).filter_by(
+                    provider_name=provider_name
+                ).first()
+            
+            # Get bank information
+            bank_ids = request.form.getlist('bank_ids[]')
+            selected_banks = []
+            
+            # For backward compatibility, keep track of the first bank
+            first_bank = None
+            
+            if bank_ids:
+                for bank_id in bank_ids:
+                    try:
+                        bank = db_session.query(Bank).filter_by(id=int(bank_id)).first()
+                        if bank:
+                            selected_banks.append(bank)
+                            if first_bank is None:
+                                first_bank = bank
+                    except ValueError:
+                        logger.warning(f"Invalid bank ID: {bank_id}")
+                
+                if not selected_banks:
+                    flash('No valid banks selected', 'error')
+                    return render_template('add_email_config.html', banks=banks)
+            
+            # Prepare configuration data
             config_data = {
                 'user_id': user_id,
                 'name': request.form.get('name', 'Default'),
-                'email_host': request.form.get('email_host'),
-                'email_port': int(request.form.get('email_port')),
-                'email_username': request.form.get('email_username'),
+                'email_username': email_username,
                 'email_password': request.form.get('email_password'),
-                'email_use_ssl': 'email_use_ssl' in request.form,
                 'bank_email_addresses': request.form.get('bank_email_addresses', ''),
                 'bank_email_subjects': request.form.get('bank_email_subjects', '')
             }
-
-            result = TransactionRepository.create_email_config(db_session, config_data)
-            if result:
+            
+            # Add bank_id of the first selected bank for backward compatibility
+            if first_bank:
+                config_data['bank_id'] = first_bank.id
+            
+            # If provider configuration is available, use it
+            if provider_config and provider:
+                config_data['email_host'] = provider_config['host']
+                config_data['email_port'] = provider_config['port']
+                config_data['email_use_ssl'] = provider_config['use_ssl']
+                config_data['service_provider_id'] = provider.id
+                logger.info(f"Using configuration for provider: {provider_name}")
+            else:
+                # Fall back to manual configuration if provider not recognized
+                config_data['email_host'] = request.form.get('email_host')
+                config_data['email_port'] = int(request.form.get('email_port', 993))
+                config_data['email_use_ssl'] = 'email_use_ssl' in request.form
+                logger.info(f"Using manual configuration (provider not recognized or not found)")
+            
+            # Create the email configuration
+            email_config = TransactionRepository.create_email_config(db_session, config_data)
+            if email_config:
+                # Create the many-to-many relationships with selected banks
+                if selected_banks:
+                    from money_tracker.models.models import EmailConfigBank
+                    for bank in selected_banks:
+                        # Check if the relationship already exists
+                        existing = db_session.query(EmailConfigBank).filter_by(
+                            email_config_id=email_config.id,
+                            bank_id=bank.id
+                        ).first()
+                        
+                        if not existing:
+                            # Create a new relationship
+                            email_config_bank = EmailConfigBank(
+                                email_config_id=email_config.id,
+                                bank_id=bank.id
+                            )
+                            db_session.add(email_config_bank)
+                    
+                    # Commit the changes
+                    db_session.commit()
+                
                 flash('Email configuration added successfully', 'success')
                 return redirect(url_for('email_configs'))
             else:
                 flash('Error adding email configuration', 'error')
+                return render_template('add_email_config.html', banks=banks)
 
-        return render_template('add_email_config.html')
+        # For GET requests, render the form
+        return render_template('add_email_config.html', banks=banks)
     except Exception as e:
         logger.error(f"Error adding email configuration: {str(e)}")
         flash(f'Error adding email configuration: {str(e)}', 'error')
@@ -873,27 +1002,122 @@ def edit_email_config(config_id):
         if not email_config:
             flash('Email configuration not found or you do not have permission to edit it', 'error')
             return redirect(url_for('email_configs'))
+            
+        # Get all available banks
+        banks = db_session.query(Bank).all()
+        
+        # Get all banks associated with this email configuration
+        from money_tracker.models.models import EmailConfigBank
+        associated_bank_ids = [rel.bank_id for rel in db_session.query(EmailConfigBank).filter_by(
+            email_config_id=email_config.id
+        ).all()]
 
         if request.method == 'POST':
+            email_username = request.form.get('email_username')
+            
+            # Extract provider from email
+            provider_name = EmailService.extract_provider_from_email(email_username)
+            
+            # Get provider configuration if available
+            provider_config = None
+            if provider_name:
+                provider_config = EmailService.get_provider_config(db_session, provider_name)
+                
+                # Get the provider record to set the relationship
+                from money_tracker.models.models import EmailServiceProvider
+                provider = db_session.query(EmailServiceProvider).filter_by(
+                    provider_name=provider_name
+                ).first()
+            
+            # Get bank information
+            bank_ids = request.form.getlist('bank_ids[]')
+            selected_banks = []
+            
+            # For backward compatibility, keep track of the first bank
+            first_bank = None
+            
+            if bank_ids:
+                for bank_id in bank_ids:
+                    try:
+                        bank = db_session.query(Bank).filter_by(id=int(bank_id)).first()
+                        if bank:
+                            selected_banks.append(bank)
+                            if first_bank is None:
+                                first_bank = bank
+                    except ValueError:
+                        logger.warning(f"Invalid bank ID: {bank_id}")
+                
+                if not selected_banks:
+                    flash('No valid banks selected', 'error')
+                    return render_template('edit_email_config.html', email_config=email_config, banks=banks)
+                
+                # Update bank_id for backward compatibility
+                email_config.bank_id = first_bank.id
+            else:
+                email_config.bank_id = None
+            
+            # Update basic fields
             email_config.name = request.form.get('name', 'Default')
-            email_config.email_host = request.form.get('email_host')
-            email_config.email_port = int(request.form.get('email_port'))
-            email_config.email_username = request.form.get('email_username')
-
+            email_config.email_username = email_username
+            
             # Only update password if provided
             new_password = request.form.get('email_password')
             if new_password:
                 email_config.email_password = new_password
-
-            email_config.email_use_ssl = 'email_use_ssl' in request.form
+                
             email_config.bank_email_addresses = request.form.get('bank_email_addresses', '')
             email_config.bank_email_subjects = request.form.get('bank_email_subjects', '')
+            
+            # If provider configuration is available, use it
+            if provider_config and provider:
+                email_config.email_host = provider_config['host']
+                email_config.email_port = provider_config['port']
+                email_config.email_use_ssl = provider_config['use_ssl']
+                email_config.service_provider_id = provider.id
+                logger.info(f"Using configuration for provider: {provider_name}")
+            else:
+                # Fall back to manual configuration if provider not recognized
+                email_config.email_host = request.form.get('email_host')
+                email_config.email_port = int(request.form.get('email_port', 993))
+                email_config.email_use_ssl = 'email_use_ssl' in request.form
+                email_config.service_provider_id = None
+                logger.info(f"Using manual configuration (provider not recognized or not found)")
 
+            # Update the many-to-many relationships with selected banks
+            if selected_banks:
+                from money_tracker.models.models import EmailConfigBank
+                
+                # Get existing relationships
+                existing_relationships = db_session.query(EmailConfigBank).filter_by(
+                    email_config_id=email_config.id
+                ).all()
+                
+                # Create a set of existing bank IDs for easy lookup
+                existing_bank_ids = {rel.bank_id for rel in existing_relationships}
+                
+                # Create a set of selected bank IDs
+                selected_bank_ids = {bank.id for bank in selected_banks}
+                
+                # Remove relationships that are no longer needed
+                for rel in existing_relationships:
+                    if rel.bank_id not in selected_bank_ids:
+                        db_session.delete(rel)
+                
+                # Add new relationships
+                for bank in selected_banks:
+                    if bank.id not in existing_bank_ids:
+                        email_config_bank = EmailConfigBank(
+                            email_config_id=email_config.id,
+                            bank_id=bank.id
+                        )
+                        db_session.add(email_config_bank)
+            
+            # Commit all changes
             db_session.commit()
             flash('Email configuration updated successfully', 'success')
             return redirect(url_for('email_configs'))
 
-        return render_template('edit_email_config.html', email_config=email_config)
+        return render_template('edit_email_config.html', email_config=email_config, banks=banks, associated_bank_ids=associated_bank_ids)
     except Exception as e:
         logger.error(f"Error editing email configuration: {str(e)}")
         flash(f'Error editing email configuration: {str(e)}', 'error')
@@ -1649,9 +1873,9 @@ def fetch_emails():
         task_id = str(uuid.uuid4())
 
         # Get form parameters
-        folder = request.form.get('folder', 'INBOX')
-        unread_only = 'unread_only' in request.form
-        save_to_db = 'save_to_db' in request.form
+        folder = 'INBOX'  # Always use INBOX as the default folder
+        time_period = request.form.get('time_period', 'only_unread')
+        save_to_db = True  # Always save transactions to the database
         preserve_balance = 'preserve_balance' in request.form
 
         # Initialize task
@@ -1664,7 +1888,7 @@ def fetch_emails():
                     'progress': 0,
                     'start_time': time.time(),
                     'folder': folder,
-                    'unread_only': unread_only,
+                    'time_period': time_period,
                     'save_to_db': save_to_db,
                     'preserve_balance': preserve_balance
                 }
@@ -1687,7 +1911,7 @@ def fetch_emails():
             logger.debug('starting email processing thread')
             thread = threading.Thread(
                 target=process_emails_task,
-                args=(task_id, user_id, account_number, bank_name, folder, unread_only, save_to_db, preserve_balance)
+                args=(task_id, user_id, account_number, bank_name, folder, time_period, save_to_db, preserve_balance)
             )
             logger.debug(f'Starting thread for task {task_id} for account {account_number}')
             thread.daemon = True
