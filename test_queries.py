@@ -96,7 +96,14 @@ def test_email_config_query():
         logger.error(f"Error querying email configurations: {str(e)}")
         return False
     finally:
-        db.close_session(session)
+        try:
+            if 'test_user' in locals() and test_user in session:
+                session.delete(test_user)
+                session.commit()
+        except Exception as cleanup_error:
+            logger.error(f"Error during cleanup: {str(cleanup_error)}")
+        finally:
+            db.close_session(session)
 
 def main():
     """Run the test queries."""
