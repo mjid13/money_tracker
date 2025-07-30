@@ -389,7 +389,7 @@ def dashboard():
             
         # Prepare data for charts
         chart_data = {}
-        
+        category_labels = []
         if accounts:
             # Import necessary modules for data aggregation
             from sqlalchemy import func, case, extract
