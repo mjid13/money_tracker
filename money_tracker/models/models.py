@@ -94,6 +94,34 @@ class User(Base):
             logger.error(f"Traceback: {traceback.format_exc()}")
             return False
 
+class EmailServiceProvider(Base):
+    """Email service provider model for storing predefined email provider settings."""
+    __tablename__ = 'email_service_providers'
+
+    id = Column(Integer, primary_key=True)
+    provider_name = Column(String(100), nullable=False, unique=True)  # e.g., gmail, outlook
+    host = Column(String(100), nullable=False)  # e.g., imap.gmail.com
+    port = Column(Integer, nullable=False)  # e.g., 993
+    use_ssl = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    email_configs = relationship("EmailConfiguration", back_populates="service_provider")
+
+class EmailConfigBank(Base):
+    """Junction table for many-to-many relationship between EmailConfiguration and Bank."""
+    __tablename__ = 'email_config_banks'
+
+    email_config_id = Column(Integer, ForeignKey('email_configurations.id'), primary_key=True)
+    bank_id = Column(Integer, ForeignKey('banks.id'), primary_key=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    email_config = relationship("EmailConfiguration", back_populates="email_config_banks")
+    bank = relationship("Bank", back_populates="email_config_banks")
+
+
 class EmailConfiguration(Base):
     """Email configuration model for storing user's email settings."""
     __tablename__ = 'email_configurations'
@@ -106,14 +134,20 @@ class EmailConfiguration(Base):
     email_username = Column(String(100), nullable=False)
     email_password = Column(String(200), nullable=False)  # Should be encrypted in production
     email_use_ssl = Column(Boolean, default=True)
-    bank_email_addresses = Column(Text)  # Comma-separated list
-    bank_email_subjects = Column(Text)  # Comma-separated list
+    service_provider_id = Column(Integer, ForeignKey('email_service_providers.id'), nullable=True)
+    bank_id = Column(Integer, ForeignKey('banks.id'), nullable=True)  # Reference to the Bank model (kept for backward compatibility)
+    bank_email_addresses = Column(Text)  # Comma-separated list (kept for backward compatibility)
+    bank_email_subjects = Column(Text)  # Comma-separated list (kept for backward compatibility)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     user = relationship("User", back_populates="email_configs")
     accounts = relationship("Account", back_populates="email_config")
+    service_provider = relationship("EmailServiceProvider", back_populates="email_configs")
+    bank = relationship("Bank", foreign_keys=[bank_id])  # Kept for backward compatibility
+    email_config_banks = relationship("EmailConfigBank", back_populates="email_config", cascade="all, delete-orphan")
+    banks = relationship("Bank", secondary="email_config_banks", viewonly=True)
 
 class Account(Base):
     """Account model representing a bank account."""
@@ -122,18 +156,20 @@ class Account(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     email_config_id = Column(Integer, ForeignKey('email_configurations.id'), nullable=True)
+    bank_id = Column(Integer, ForeignKey('banks.id'), nullable=True)  # Reference to the Bank model
     account_number = Column(String(50), nullable=False)
-    bank_name = Column(String(100), nullable=False)
+    bank_name = Column(String(100), nullable=False)  # Kept for backward compatibility
     account_holder = Column(String(100))
     branch = Column(String(200), nullable=True)
     balance = Column(Float, default=0.0)
-    currency = Column(String(10), default='OMR')
+    currency = Column(String(10), default='OMR')  # Kept for backward compatibility
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     user = relationship("User", back_populates="accounts")
     email_config = relationship("EmailConfiguration", back_populates="accounts")
+    bank = relationship("Bank", back_populates="accounts")  # Relationship to Bank model
     transactions = relationship("Transaction", back_populates="account")
 
     # Composite unique constraint for user_id, email_config_id, and account_number
@@ -200,6 +236,30 @@ class Counterparty(Base):
     # Ensure counterparty names are unique
     __table_args__ = (
         UniqueConstraint('name', name='_counterparty_name_uc'),
+    )
+
+
+class Bank(Base):
+    """Bank model for storing bank information."""
+    __tablename__ = 'banks'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)
+    email_address = Column(String(200), nullable=False)
+    email_subjects = Column(Text, nullable=False)  # Comma-separated list of subject keywords
+    currency = Column(String(10), default='OMR')
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    accounts = relationship("Account", back_populates="bank")
+    email_configs = relationship("EmailConfiguration", foreign_keys="EmailConfiguration.bank_id")  # Kept for backward compatibility
+    email_config_banks = relationship("EmailConfigBank", back_populates="bank", cascade="all, delete-orphan")
+    email_configurations = relationship("EmailConfiguration", secondary="email_config_banks", viewonly=True)
+
+    # Ensure bank names are unique
+    __table_args__ = (
+        UniqueConstraint('name', name='_bank_name_uc'),
     )
 
 

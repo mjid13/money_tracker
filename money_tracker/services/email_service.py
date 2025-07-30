@@ -117,13 +117,20 @@ class EmailService:
             self.connection = None
             return self.connect()
 
-    def get_bank_emails(self, folder: str = "INBOX", unread_only: bool = True) -> List[Dict[str, Any]]:
+    def get_bank_emails(self, folder: str = "INBOX", time_period: str = "only_unread") -> List[Dict[str, Any]]:
         """
-        Retrieve bank emails from the specified folder.
+        Retrieve bank emails from the specified folder based on time period.
 
         Args:
             folder (str): Email folder to search in.
-            unread_only (bool): If True, only fetch unread emails.
+            time_period (str): Time period to filter emails. Options:
+                - only_unread: Only unread emails
+                - last_week: Emails from the last week
+                - last_2_weeks: Emails from the last 2 weeks
+                - last_month: Emails from the last month
+                - last_3_months: Emails from the last 3 months
+                - last_6_months: Emails from the last 6 months
+                - last_year: Emails from the last year
 
         Returns:
             List[Dict[str, Any]]: List of email data dictionaries.
@@ -142,8 +149,32 @@ class EmailService:
 
             # Create search criteria
             search_criteria = []
-            if unread_only:
+            
+            # Handle time period filtering
+            if time_period == "only_unread":
                 search_criteria.append('UNSEEN')
+            else:
+                # Import datetime for date calculations
+                from datetime import datetime, timedelta
+                
+                # Calculate date based on selected time period
+                current_date = datetime.now()
+                if time_period == "last_week":
+                    since_date = current_date - timedelta(days=7)
+                elif time_period == "last_2_weeks":
+                    since_date = current_date - timedelta(days=14)
+                elif time_period == "last_month":
+                    since_date = current_date - timedelta(days=30)
+                elif time_period == "last_3_months":
+                    since_date = current_date - timedelta(days=90)
+                elif time_period == "last_6_months":
+                    since_date = current_date - timedelta(days=180)
+                elif time_period == "last_year":
+                    since_date = current_date - timedelta(days=365)
+                
+                # Format date for IMAP search (DD-MMM-YYYY)
+                date_str = since_date.strftime("%d-%b-%Y")
+                search_criteria.append(f'SINCE "{date_str}"')
 
             # Add FROM criteria for bank email addresses
             from_criteria = []
@@ -445,6 +476,80 @@ class EmailService:
 
         logger.debug("Email is from a bank but not related to user's accounts")
         return False
+
+    @staticmethod
+    def extract_provider_from_email(email: str) -> Optional[str]:
+        """
+        Extract the email service provider from an email address.
+        
+        Args:
+            email (str): Email address to extract provider from.
+            
+        Returns:
+            Optional[str]: Provider name or None if not recognized.
+        """
+        if not email or '@' not in email:
+            return None
+            
+        # Extract domain from email
+        domain = email.split('@')[-1].lower()
+        
+        # Map domains to providers
+        domain_to_provider = {
+            'gmail.com': 'gmail',
+            'googlemail.com': 'gmail',
+            'outlook.com': 'outlook',
+            'hotmail.com': 'outlook',
+            'live.com': 'outlook',
+            'msn.com': 'outlook',
+            'yahoo.com': 'yahoo',
+            'yahoo.co.uk': 'yahoo',
+            'yahoo.fr': 'yahoo',
+            'aol.com': 'aol',
+            'zoho.com': 'zoho',
+            'icloud.com': 'icloud',
+            'me.com': 'icloud',
+            'mac.com': 'icloud',
+            'protonmail.com': 'protonmail',
+            'protonmail.ch': 'protonmail',
+            'pm.me': 'protonmail'
+        }
+        
+        # Return provider if domain is recognized
+        return domain_to_provider.get(domain)
+    
+    @staticmethod
+    def get_provider_config(session, provider_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get the configuration for an email service provider.
+        
+        Args:
+            session: Database session.
+            provider_name (str): Name of the email service provider.
+            
+        Returns:
+            Optional[Dict[str, Any]]: Provider configuration or None if not found.
+        """
+        try:
+            from money_tracker.models.models import EmailServiceProvider
+            
+            provider = session.query(EmailServiceProvider).filter_by(
+                provider_name=provider_name
+            ).first()
+            
+            if not provider:
+                logger.warning(f"No configuration found for provider: {provider_name}")
+                return None
+                
+            return {
+                'host': provider.host,
+                'port': provider.port,
+                'use_ssl': provider.use_ssl
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting provider configuration: {str(e)}")
+            return None
 
     @classmethod
     def from_user_config(cls, session, user_id: int) -> Optional['EmailService']:
