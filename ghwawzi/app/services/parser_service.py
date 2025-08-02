@@ -507,6 +507,3 @@ class TransactionParser:
                 return False
 
         return True
-# tr = TransactionParser()
-# name = tr._get_name("POS 883315-Quality Saving - Al AraMUSC POS251730X3JGQQM8")
-# print(name)

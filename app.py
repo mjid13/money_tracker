@@ -557,7 +557,7 @@ def dashboard():
     except Exception as e:
         logger.error(f"Error loading dashboard: {str(e)}")
         flash('Error loading dashboard. Please try again.', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('main.index'))
     finally:
         db.close_session(db_session)
 

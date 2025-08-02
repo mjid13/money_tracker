@@ -5,13 +5,14 @@ Counterparty service for managing unique counterparty transactions.
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 
-from money_tracker.models.database import Database
-from money_tracker.models.models import CategoryRepository, Category, CategoryMapping, CategoryType, Transaction, Counterparty, CounterpartyCategory
+from app.models.database import Database
+from app.models.models import Category, CategoryMapping, CategoryType, Transaction, Counterparty, CounterpartyCategory
+from app.models.category import CategoryRepository
 
 logger = logging.getLogger(__name__)
 
 # Import CategoryService for reusing category CRUD operations
-from money_tracker.services.category_service import CategoryService
+from app.services.category_service import CategoryService
 
 class CounterpartyService:
     """Service for managing unique counterparty transactions with dynamic categorization."""
@@ -40,7 +41,7 @@ class CounterpartyService:
             try:
                 # Get all counterparties that have transactions for this user
                 from sqlalchemy import distinct, func, case, outerjoin
-                from money_tracker.models.models import Account
+                from app.models.models import Account
 
                 # Query all counterparties with transactions for this user
                 counterparties_query = session.query(
@@ -226,7 +227,7 @@ class CounterpartyService:
 
                 # Update all matching transactions with this category
                 from sqlalchemy import and_, or_
-                from money_tracker.models.models import Account
+                from app.models.models import Account
 
                 # Build the filter conditions based on what was provided
                 filter_conditions = [Account.user_id == user_id]
@@ -322,7 +323,7 @@ class CounterpartyService:
             try:
                 # Get all uncategorized transactions for this user
                 from sqlalchemy import and_
-                from money_tracker.models.models import Account
+                from app.models.models import Account
 
                 transactions = session.query(Transaction).join(Account).filter(
                     Account.user_id == user_id,

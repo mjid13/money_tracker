@@ -3,22 +3,25 @@ Main views for the Flask application.
 """
 import logging
 from datetime import datetime
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session
-from app.models import Database, TransactionRepository, User, Account, EmailConfiguration
+from flask import Blueprint, render_template, redirect, url_for, flash, session, request
+from app.models.database import Database
+from app.models.transaction import TransactionRepository
+from app.models.user import User
+from app.models.models import Account, EmailConfiguration
 from app.utils.decorators import login_required
-
+from app.services.counterparty_service import CounterpartyService
 # Create blueprint
 main_bp = Blueprint('main', __name__)
 
 # Initialize database and logger
 db = Database()
 logger = logging.getLogger(__name__)
-
+counterparty_service = CounterpartyService()
 
 @main_bp.route('/')
 def index():
     """Home page with landing content."""
-    return render_template('index.html', year=datetime.now().year)
+    return render_template('main/index.html', year=datetime.now().year)
 
 
 @main_bp.route('/dashboard')
@@ -38,14 +41,14 @@ def dashboard():
         ).all()
 
         # Simplified dashboard for now - can be enhanced with charts later
-        return render_template('dashboard.html', 
+        return render_template('main/dashboard.html',
                              accounts=accounts, 
                              email_configs=email_configs)
 
     except Exception as e:
         logger.error(f"Error loading dashboard: {str(e)}")
         flash('Error loading dashboard', 'error')
-        return render_template('dashboard.html', accounts=[], email_configs=[])
+        return render_template('main/dashboard.html', accounts=[], email_configs=[])
     finally:
         db.close_session(db_session)
 
@@ -73,55 +76,43 @@ def profile():
         db.close_session(db_session)
 
 
-@main_bp.route('/accounts')
+@main_bp.route('/counterparties')
 @login_required
-def accounts():
-    """Display user's accounts."""
+def counterparties():
+    """List all unique counterparties."""
     user_id = session.get('user_id')
+    account_number = request.args.get('account_number', 'all')
     db_session = db.get_session()
 
     try:
+        # Get user's accounts
         accounts = TransactionRepository.get_user_accounts(db_session, user_id)
-        return render_template('accounts.html', accounts=accounts)
 
+        # Get all unique counterparties for this user, filtered by account if specified
+        counterparties = counterparty_service.get_unique_counterparties(user_id, account_number)
+
+        # Get all categories for this user (for the categorization form)
+        categories = counterparty_service.get_categories(user_id)
+
+        return render_template('counterparties.html',
+                               counterparties=counterparties,
+                               categories=categories,
+                               accounts=accounts,
+                               selected_account=account_number)
     except Exception as e:
-        logger.error(f"Error loading accounts: {str(e)}")
-        flash('Error loading accounts', 'error')
-        return render_template('accounts.html', accounts=[])
+        logger.error(f"Error loading counterparties: {str(e)}")
+        flash('Error loading counterparties. Please try again.', 'error')
+        return redirect(url_for('dashboard'))
     finally:
         db.close_session(db_session)
 
-
-@main_bp.route('/account/<account_number>')
+@main_bp.route('/results')
 @login_required
-def account_details(account_number):
-    """Display account details and transactions."""
-    user_id = session.get('user_id')
-    db_session = db.get_session()
+def results():
+    """Display the parsed transaction data."""
+    transaction_data = session.get('transaction_data')
+    if not transaction_data:
+        flash('No transaction data available', 'error')
+        return redirect(url_for('dashboard'))
 
-    try:
-        # Get account and verify ownership
-        account = db_session.query(Account).filter(
-            Account.account_number == account_number,
-            Account.user_id == user_id
-        ).first()
-
-        if not account:
-            flash('Account not found or you do not have permission to view it', 'error')
-            return redirect(url_for('main.accounts'))
-
-        # Get transactions for this account
-        transactions = TransactionRepository.get_account_transactions(
-            db_session, account.id, limit=100
-        )
-
-        return render_template('account_details.html', 
-                             account=account, 
-                             transactions=transactions)
-
-    except Exception as e:
-        logger.error(f"Error loading account details: {str(e)}")
-        flash('Error loading account details', 'error')
-        return redirect(url_for('main.accounts'))
-    finally:
-        db.close_session(db_session)
+    return render_template('results.html', transaction=transaction_data)

@@ -4,7 +4,9 @@ Authentication views for the Flask application.
 import logging
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
-from app.models import Database, TransactionRepository, User
+from app.models.database import Database
+from app.models.transaction import TransactionRepository
+from app.models.user import User
 
 # Create blueprint
 auth_bp = Blueprint('auth', __name__)
@@ -69,7 +71,7 @@ def register():
         finally:
             db.close_session(db_session)
 
-    return render_template('register.html')
+    return render_template('auth/register.html')
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -81,7 +83,7 @@ def login():
 
         if not username or not password:
             flash('Username and password are required', 'error')
-            return render_template('login.html')
+            return render_template('auth/login.html')
 
         db_session = db.get_session()
         try:
@@ -89,7 +91,7 @@ def login():
 
             if not user or not user.check_password(password):
                 flash('Invalid username or password', 'error')
-                return render_template('login.html')
+                return render_template('auth/login.html')
 
             # Set user session
             session['user_id'] = user.id
@@ -101,11 +103,11 @@ def login():
         except Exception as e:
             logger.error(f"Error logging in: {str(e)}")
             flash('Error logging in. Please try again.', 'error')
-            return render_template('login.html')
+            return render_template('auth/login.html')
         finally:
             db.close_session(db_session)
 
-    return render_template('login.html')
+    return render_template('auth/login.html')
 
 
 @auth_bp.route('/logout')

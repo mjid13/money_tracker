@@ -3,12 +3,17 @@ API views for the Flask application.
 """
 import logging
 import json
-from datetime import time
+import os
+from datetime import time, datetime
 from threading import Lock
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, Response, Blueprint
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, current_app, Blueprint
 from app.models import Database, TransactionRepository, Transaction, Account, Category
 from app.utils.decorators import login_required
+from werkzeug.utils import secure_filename
+
+from ghwawzi.app.services.pdf_parser_service import PDFParser
+from ghwawzi.app.utils.helpers import allowed_file
 
 # Create blueprint
 api_bp = Blueprint('api', __name__)
@@ -17,162 +22,6 @@ api_bp = Blueprint('api', __name__)
 db = Database()
 logger = logging.getLogger(__name__)
 
-# Task manager for tracking email fetching tasks
-email_tasks = {}
-email_tasks_lock = Lock()
-
-
-@api_bp.route('/transaction/<int:transaction_id>', methods=['DELETE'])
-@login_required
-def delete_transaction(transaction_id):
-    """Delete a transaction."""
-    user_id = session.get('user_id')
-    db_session = db.get_session()
-    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-
-    try:
-        # Get transaction and verify it belongs to the user
-        transaction = db_session.query(Transaction).join(Account).filter(
-            Transaction.id == transaction_id,
-            Account.user_id == user_id
-        ).first()
-
-        if not transaction:
-            if is_ajax:
-                return jsonify({'success': False, 'message': 'Transaction not found or you do not have permission to delete it'})
-            flash('Transaction not found or you do not have permission to delete it', 'error')
-            return redirect(url_for('accounts'))
-
-        account_number = transaction.account.account_number
-
-        result = TransactionRepository.delete_transaction(db_session, transaction_id)
-        if result:
-            if is_ajax:
-                return jsonify({
-                    'success': True,
-                    'message': 'Transaction deleted successfully',
-                    'transaction_id': transaction_id
-                })
-            flash('Transaction deleted successfully', 'success')
-        else:
-            if is_ajax:
-                return jsonify({'success': False, 'message': 'Error deleting transaction'})
-            flash('Error deleting transaction', 'error')
-
-        return redirect(url_for('account_details', account_number=account_number))
-    except Exception as e:
-        logger.error(f"Error deleting transaction: {str(e)}")
-        if is_ajax:
-            return jsonify({'success': False, 'message': f'Error deleting transaction: {str(e)}'})
-        flash(f'Error deleting transaction: {str(e)}', 'error')
-        return redirect(url_for('accounts'))
-    finally:
-        db.close_session(db_session)
-
-
-@api_bp.route('/transaction/<int:transaction_id>/category', methods=['PUT'])
-@login_required
-def update_transaction_category(transaction_id):
-    """Update the category of a transaction."""
-    user_id = session.get('user_id')
-    db_session = db.get_session()
-    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-
-    try:
-        # Get transaction and verify it belongs to the user
-        transaction = db_session.query(Transaction).join(Account).filter(
-            Transaction.id == transaction_id,
-            Account.user_id == user_id
-        ).first()
-
-        if not transaction:
-            if is_ajax:
-                return jsonify(
-                    {'success': False, 'message': 'Transaction not found or you do not have permission to edit it'})
-            flash('Transaction not found or you do not have permission to edit it', 'error')
-            return redirect(url_for('accounts'))
-
-        # Get the category ID from the request
-        category_id = request.form.get('category_id')
-        if not category_id:
-            if is_ajax:
-                return jsonify({'success': False, 'message': 'Category ID is required'})
-            flash('Category ID is required', 'error')
-            return redirect(url_for('account_details', account_number=transaction.account.account_number))
-
-        # Update the transaction category
-        transaction_data = {
-            'category_id': category_id
-        }
-        updated_transaction = TransactionRepository.update_transaction(
-            db_session, transaction_id, transaction_data
-        )
-
-        if updated_transaction:
-            # Get the category name for the response
-            category = db_session.query(Category).filter(Category.id == category_id).first()
-            category_name = category.name if category else 'Uncategorized'
-
-            if is_ajax:
-                return jsonify({
-                    'success': True,
-                    'message': 'Category updated successfully',
-                    'category_name': category_name
-                })
-            flash('Category updated successfully', 'success')
-            return redirect(url_for('account_details', account_number=transaction.account.account_number))
-        else:
-            if is_ajax:
-                return jsonify({'success': False, 'message': 'Error updating category'})
-            flash('Error updating category', 'error')
-            return redirect(url_for('account_details', account_number=transaction.account.account_number))
-    except Exception as e:
-        logger.error(f"Error updating transaction category: {str(e)}")
-        if is_ajax:
-            return jsonify({'success': False, 'message': f'Error updating transaction category: {str(e)}'})
-        flash(f'Error updating transaction category: {str(e)}', 'error')
-        return redirect(url_for('accounts'))
-    finally:
-        db.close_session(db_session)
-
-
-@api_bp.route('/email/task/<task_id>/status')
-@login_required
-def email_task_status(task_id):
-    """API endpoint for checking email task status."""
-    with email_tasks_lock:
-        if task_id not in email_tasks:
-            return jsonify({'error': 'Task not found'}), 404
-
-        task = email_tasks[task_id].copy()  # Create a copy to avoid holding the lock
-
-    # Calculate elapsed time
-    elapsed_time = time.time() - task['start_time']
-
-    # Prepare response data
-    response = {
-        'status': task['status'],
-        'progress': task['progress'],
-        'elapsed_seconds': elapsed_time,
-        'message': task.get('message', '')
-    }
-
-    # Add estimated time if available
-    if 'estimated_seconds' in task:
-        response['estimated_seconds'] = task['estimated_seconds']
-
-    # Add completion data if task is completed
-    if task['status'] == 'completed':
-        response['parsed_count'] = task.get('parsed_count', 0)
-        response['saved_count'] = task.get('saved_count', 0)
-
-        # If there's a transaction, redirect to results
-        if 'first_transaction' in task:
-            # Store the transaction in session for the results page
-            session['transaction_data'] = task['first_transaction']
-            response['redirect_url'] = url_for('results')
-
-    return jsonify(response)
 
 @api_bp.route('/get_chart_data')
 @login_required
@@ -408,5 +257,162 @@ def get_chart_data():
     except Exception as e:
         logger.error(f"Error getting chart data: {str(e)}")
         return jsonify({'error': str(e)}), 500
+    finally:
+        db.close_session(db_session)
+
+
+@api_bp.route('/upload_pdf', methods=['GET', 'POST'])
+@login_required
+def upload_pdf():
+    """Upload and parse PDF bank statement."""
+    if request.method == 'POST':
+        user_id = session.get('user_id')
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        account_number = request.form.get('account_number')
+
+        if not account_number:
+            if is_ajax:
+                return jsonify({'success': False, 'message': 'Please select an account'})
+            flash('Please select an account', 'error')
+            return redirect(url_for('dashboard'))
+
+        # Check if the post request has the file part
+        if 'pdf_file' not in request.files:
+            if is_ajax:
+                return jsonify({'success': False, 'message': 'No file part'})
+            flash('No file part', 'error')
+            return redirect(url_for('dashboard'))
+
+        file = request.files['pdf_file']
+
+        # If user does not select file, browser also
+        # submit an empty part without filename
+        if file.filename == '':
+            if is_ajax:
+                return jsonify({'success': False, 'message': 'No selected file'})
+            flash('No selected file', 'error')
+            return redirect(url_for('dashboard'))
+
+        if file and allowed_file(file.filename):
+            # Generate a unique filename to avoid collisions
+            filename = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}")
+            filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+
+            try:
+                # Parse the PDF file
+                pdf_parser = PDFParser()
+                transactions = pdf_parser.parse_pdf(filepath)
+
+                if not transactions:
+                    if is_ajax:
+                        return jsonify({'success': False, 'message': 'No transactions found in the PDF file'})
+                    flash('No transactions found in the PDF file', 'error')
+                    # Clean up the uploaded file
+                    os.remove(filepath)
+                    return redirect(url_for('dashboard'))
+
+                # Store transactions in the database
+                db_session = db.get_session()
+                try:
+                    transaction_count = 0
+                    for transaction_data in transactions:
+                        if transaction_data["account_number"] != account_number:
+                            logger.error(
+                                f"The account number {transaction_data['account_number']} in the PDF does not match the selected account {account_number}")
+                            if is_ajax:
+                                return jsonify({'success': False,
+                                                'message': f'Transaction account number {transaction_data["account_number"]} does not match selected account {account_number}'})
+                            flash(
+                                f'Transaction account number {transaction_data["account_number"]} does not match selected account {account_number}',
+                                'error')
+                            return redirect(url_for('dashboard'))
+                        # Add user_id and account_number to transaction data
+                        transaction_data['user_id'] = user_id
+
+                        # Add preserve_balance flag
+                        preserve_balance = 'preserve_balance' in request.form
+                        transaction_data['preserve_balance'] = preserve_balance
+
+                        # Create transaction in database
+                        transaction = TransactionRepository.create_transaction(db_session, transaction_data)
+                        if transaction:
+                            transaction_count += 1
+
+                    # Commit all transactions before cleanup
+                    db_session.commit()
+
+                    # Now safe to clean up the uploaded file
+                    if filepath and os.path.exists(filepath):
+                        os.remove(filepath)
+                        logger.info(f"Successfully removed uploaded file: {filepath}")
+
+                    if transaction_count > 0:
+                        success_message = f'Successfully imported {transaction_count} transactions from PDF'
+                        if is_ajax:
+                            return jsonify({
+                                'success': True,
+                                'message': success_message,
+                                'transaction_count': transaction_count,
+                                'redirect': url_for('account_details', account_number=account_number)
+                            })
+                        flash(success_message, 'success')
+                    else:
+                        warning_message = 'No transactions were imported from the PDF'
+                        if is_ajax:
+                            return jsonify({
+                                'success': True,
+                                'message': warning_message,
+                                'transaction_count': 0,
+                                'redirect': url_for('account_details', account_number=account_number)
+                            })
+                        flash(warning_message, 'warning')
+
+                    return redirect(url_for('account_details', account_number=account_number))
+                except Exception as e:
+                    logger.error(f"Error saving transactions to database: {str(e)}")
+                    if is_ajax:
+                        return jsonify({'success': False, 'message': f'Error saving to database: {str(e)}'})
+                    flash(f'Error saving to database: {str(e)}', 'error')
+                    return redirect(url_for('dashboard'))
+                finally:
+                    db.close_session(db_session)
+                    if filepath and os.path.exists(filepath):
+                        try:
+                            os.remove(filepath)
+                            logger.info(f"Cleaned up file in finally block: {filepath}")
+                        except OSError as e:
+                            logger.warning(f"Could not remove file {filepath}: {str(e)}")
+
+            except Exception as e:
+                logger.error(f"Error parsing PDF file: {str(e)}")
+                if is_ajax:
+                    return jsonify({'success': False, 'message': f'Error parsing PDF file: {str(e)}'})
+                flash(f'Error parsing PDF file: {str(e)}', 'error')
+                # Clean up the uploaded file if it exists
+                if filepath and os.path.exists(filepath):
+                    try:
+                        os.remove(filepath)
+                        logger.info(f"Cleaned up file after parsing error: {filepath}")
+                    except OSError as e:
+                        logger.warning(f"Could not remove file {filepath}: {str(e)}")
+                return redirect(url_for('dashboard'))
+
+        else:
+            if is_ajax:
+                return jsonify({'success': False, 'message': 'File type not allowed. Please upload a PDF file.'})
+            flash('File type not allowed. Please upload a PDF file.', 'error')
+            return redirect(url_for('dashboard'))
+
+    # GET request - render the upload form
+    db_session = db.get_session()
+    try:
+        # Get user accounts for the dropdown
+        accounts = TransactionRepository.get_user_accounts(db_session, session.get('user_id'))
+        return render_template('dashboard.html', accounts=accounts)
+    except Exception as e:
+        logger.error(f"Error getting user accounts: {str(e)}")
+        flash(f'Error: {str(e)}', 'error')
+        return redirect(url_for('dashboard'))
     finally:
         db.close_session(db_session)

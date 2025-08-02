@@ -12,10 +12,6 @@ import socket
 import ssl
 import time
 
-from money_tracker.config import settings
-
-from money_tracker.models.models import Account, EmailConfiguration
-
 logger = logging.getLogger(__name__)
 
 class EmailService:
@@ -531,7 +527,7 @@ class EmailService:
             Optional[Dict[str, Any]]: Provider configuration or None if not found.
         """
         try:
-            from money_tracker.models.models import EmailServiceProvider
+            from app.models.models import EmailServiceProvider
             
             provider = session.query(EmailServiceProvider).filter_by(
                 provider_name=provider_name
@@ -564,7 +560,8 @@ class EmailService:
             Optional[EmailService]: EmailService instance or None if configuration not found.
         """
         try:
-            from money_tracker.models.models import EmailConfiguration, Account, TransactionRepository
+            from app.models.models import EmailConfiguration, Account
+            from app.models.transaction import TransactionRepository
 
             # Get user's email configuration
             email_config = session.query(EmailConfiguration).filter(

@@ -3,10 +3,11 @@ Category service for managing transaction categories.
 """
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 
-from money_tracker.models.database import Database
-from money_tracker.models.models import CategoryRepository, Category, CategoryMapping, CategoryType, Transaction
+from app.models.database import Database
+from app.models.models import  Category, CategoryMapping, CategoryType, Transaction
+from app.models.category import CategoryRepository
 
 logger = logging.getLogger(__name__)
 
@@ -272,7 +273,7 @@ class CategoryService:
             try:
                 # Get all uncategorized transactions for this user
                 from sqlalchemy import and_
-                from money_tracker.models.models import Account
+                from app.models.models import Account
                 
                 transactions = session.query(Transaction).join(Account).filter(
                     Account.user_id == user_id,
