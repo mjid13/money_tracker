@@ -453,7 +453,7 @@ class PDFParser:
                 'transaction_content': row['Narration'],
                 'amount': amount,
                 'transaction_type': transaction_type,
-                'balance': row['Balance'] if not pd.isna(row['Balance']) else None,
+                'balance': row['Balance'].replace(",", "") if not pd.isna(row['Balance'].replace(",", "")) else None,
                 'counterparty_name': parsed_narration["counterparty_name"],
                 'transaction_id': parsed_narration["transaction_id"],
                 'transaction_details': parsed_narration["details"],
@@ -462,19 +462,19 @@ class PDFParser:
                 'source': 'PDF',
                 'currency': account_info['currency']
             }
-            
+
             transactions.append(transaction_data)
-        
+
         return transactions
 
     @staticmethod
     def _parse_narration(narration: str) -> Dict[str, Any]:
         """
         Parse counterparty name and transaction ID from narration.
-        
+
         Args:
             narration (str): Narration text.
-            
+
         Returns:
             Tuple[str, Optional[str]]: Counterparty name and transaction ID.
         """
@@ -521,32 +521,32 @@ class PDFParser:
                 }
 
         return {'details': text, 'counterparty_name': '', 'transaction_id': None}
-    
+
     def _determine_transaction_type_and_amount(self, row: pd.Series) -> Tuple[str, Optional[float]]:
         """
         Determine transaction type and amount from row data.
-        
+
         Args:
             row (pd.Series): Row data.
-            
+
         Returns:
             Tuple[str, Optional[float]]: Transaction type and amount.
         """
         # Check if Debit or Credit is not null
         if not pd.isna(row['Debit']) and row['Debit'] != '':
             try:
-                amount = float(row['Debit'])
+                amount = float(row['Debit'].replace(",", ""))
                 return 'EXPENSE', amount
             except (ValueError, TypeError):
                 pass
-        
+
         if not pd.isna(row['Credit']) and row['Credit'] != '':
             try:
-                amount = float(row['Credit'])
+                amount = float(row['Credit'].replace(",", ""))
                 return 'INCOME', amount
             except (ValueError, TypeError):
                 pass
-        
+
         return 'unknown', None
 
     def _parse_date_string(self, date_str: str) -> Optional[datetime]:
@@ -585,3 +585,4 @@ class PDFParser:
         except Exception as e:
             logger.warning(f"Failed to parse date string '{date_str}': {str(e)}")
             return None
+
