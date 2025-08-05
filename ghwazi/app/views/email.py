@@ -9,14 +9,14 @@ from flask import (Blueprint, current_app, flash, jsonify, redirect,
                    render_template, request, session, url_for)
 from werkzeug.utils import secure_filename
 
-from app.models import (Account, Bank, Category, CategoryMapping,
-                        EmailConfiguration, Transaction)
-from app.models.database import Database
-from app.models.transaction import TransactionRepository
-from app.models.user import User
-from app.services.email_service import EmailService
-from app.services.parser_service import TransactionParser
-from app.utils.decorators import login_required
+from .models import (Account, Bank, Category, CategoryMapping,
+                EmailConfiguration, Transaction)
+from .models.database import Database
+from .models.transaction import TransactionRepository
+from .models.user import User
+from .services.email_service import EmailService
+from .services.parser_service import TransactionParser
+from .utils.decorators import login_required
 
 # Create blueprint
 email_bp = Blueprint("email", __name__)
@@ -309,7 +309,7 @@ def add_email_config():
                 )
 
                 # Get the provider record to set the relationship
-                from app.models.models import EmailServiceProvider
+                from .models.models import EmailServiceProvider
 
                 provider = (
                     db_session.query(EmailServiceProvider)
@@ -376,7 +376,7 @@ def add_email_config():
             if email_config:
                 # Create the many-to-many relationships with selected banks
                 if selected_banks:
-                    from app.models.models import EmailConfigBank
+                    from .models.models import EmailConfigBank
 
                     for bank in selected_banks:
                         # Check if the relationship already exists
@@ -441,7 +441,7 @@ def edit_email_config(config_id):
         banks = db_session.query(Bank).all()
 
         # Get all banks associated with this email configuration
-        from app.models.models import EmailConfigBank
+        from .models.models import EmailConfigBank
 
         associated_bank_ids = [
             rel.bank_id
@@ -464,7 +464,7 @@ def edit_email_config(config_id):
                 )
 
                 # Get the provider record to set the relationship
-                from app.models.models import EmailServiceProvider
+                from .models.models import EmailServiceProvider
 
                 provider = (
                     db_session.query(EmailServiceProvider)
@@ -538,7 +538,7 @@ def edit_email_config(config_id):
 
             # Update the many-to-many relationships with selected banks
             if selected_banks:
-                from app.models.models import EmailConfigBank
+                from .models.models import EmailConfigBank
 
                 # Get existing relationships
                 existing_relationships = (

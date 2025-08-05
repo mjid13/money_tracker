@@ -12,11 +12,11 @@ from flask import (Blueprint, Flask, current_app, flash, jsonify, redirect,
                    render_template, request, session, url_for)
 from werkzeug.utils import secure_filename
 
-from app.models import (Account, Category, Database, Transaction,
-                        TransactionRepository)
-from app.services.pdf_parser_service import PDFParser
-from app.utils.decorators import login_required
-from app.utils.helpers import allowed_file
+from .models import (Account, Category, Database, Transaction,
+                     TransactionRepository)
+from .services.pdf_parser_service import PDFParser
+from .utils.decorators import login_required
+from .utils.helpers import allowed_file
 
 # Create blueprint
 api_bp = Blueprint("api", __name__)

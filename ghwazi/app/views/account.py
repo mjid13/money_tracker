@@ -4,12 +4,12 @@ from datetime import datetime
 from flask import (Blueprint, flash, jsonify, redirect, render_template,
                    request, session, url_for)
 
-from app.models import (Account, Bank, Category, CategoryMapping,
-                        EmailConfiguration, Transaction)
-from app.models.database import Database
-from app.models.transaction import TransactionRepository
-from app.models.user import User
-from app.utils.decorators import login_required
+from .models import (Account, Bank, Category, CategoryMapping,
+                     EmailConfiguration, Transaction)
+from .models.database import Database
+from .models.transaction import TransactionRepository
+from .models.user import User
+from .utils.decorators import login_required
 
 # Create blueprint
 account_bp = Blueprint("account", __name__)

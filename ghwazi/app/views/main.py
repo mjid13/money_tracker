@@ -10,13 +10,13 @@ from threading import Lock
 from flask import (Blueprint, flash, redirect, render_template, request,
                    session, url_for)
 
-from app.models.database import Database
-from app.models.models import Account, EmailConfiguration
-from app.models.transaction import TransactionRepository
-from app.models.user import User
-from app.services.counterparty_service import CounterpartyService
-from app.utils.decorators import login_required
-from app.views.email import email_tasks_lock, scraping_accounts
+from .models.database import Database
+from .models.models import Account, EmailConfiguration
+from .models.transaction import TransactionRepository
+from .models.user import User
+from .services.counterparty_service import CounterpartyService
+from .utils.decorators import login_required
+from .views.email import email_tasks_lock, scraping_accounts
 
 # Create blueprint
 main_bp = Blueprint("main", __name__)
@@ -65,7 +65,7 @@ def dashboard():
 
             from sqlalchemy import case, extract, func
 
-            from app.models.models import (Category, Transaction,
+            from .models.models import (Category, Transaction,
                                            TransactionType)
 
             # 1. Income vs. Expense Comparison Chart

@@ -3,7 +3,7 @@ Validation functions for the application.
 """
 
 import re
-from email.utils import parseaddr
+# from email.utils import parseaddr
 
 
 def validate_email(email):

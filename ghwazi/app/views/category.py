@@ -7,14 +7,14 @@ import logging
 from flask import (Blueprint, flash, jsonify, redirect, render_template,
                    request, session, url_for)
 
-from app.models import (Category, CategoryMapping, CategoryType,
-                        EmailConfiguration)
-from app.models.database import Database
-from app.models.transaction import TransactionRepository
-from app.models.user import User
-from app.services.category_service import CategoryService
-from app.services.counterparty_service import CounterpartyService
-from app.utils.decorators import login_required
+from .models import (Category, CategoryMapping, CategoryType,
+                EmailConfiguration)
+from .models.database import Database
+from .models.transaction import TransactionRepository
+from .models.user import User
+from .services.category_service import CategoryService
+from .services.counterparty_service import CounterpartyService
+from .utils.decorators import login_required
 
 # Create blueprint
 category_bp = Blueprint("category", __name__)

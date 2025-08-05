@@ -5,15 +5,15 @@ Counterparty service for managing unique counterparty transactions.
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from app.models.category import CategoryRepository
-from app.models.database import Database
-from app.models.models import (Category, CategoryMapping, CategoryType,
+from .models.category import CategoryRepository
+from .models.database import Database
+from .models.models import (Category, CategoryMapping, CategoryType,
                                Counterparty, CounterpartyCategory, Transaction)
 
 logger = logging.getLogger(__name__)
 
 # Import CategoryService for reusing category CRUD operations
-from app.services.category_service import CategoryService
+from .services.category_service import CategoryService
 
 
 class CounterpartyService:

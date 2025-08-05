@@ -5,9 +5,9 @@ Category service for managing transaction categories.
 import logging
 from typing import List, Optional
 
-from app.models.category import CategoryRepository
-from app.models.database import Database
-from app.models.models import (Category, CategoryMapping, CategoryType,
+from .models.category import CategoryRepository
+from .models.database import Database
+from .models.models import (Category, CategoryMapping, CategoryType,
                                Transaction)
 
 logger = logging.getLogger(__name__)

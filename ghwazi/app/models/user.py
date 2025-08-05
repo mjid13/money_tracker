@@ -1,12 +1,8 @@
-import enum
 import logging
-import random
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 
-from sqlalchemy import (Boolean, Column, DateTime, Enum, Float, ForeignKey,
-                        Integer, String, Text, UniqueConstraint)
-from sqlalchemy.orm import Session, relationship
+from sqlalchemy import (Column, DateTime, Integer, String)
+from sqlalchemy.orm import relationship
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .database import Base

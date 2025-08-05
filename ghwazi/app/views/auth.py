@@ -8,9 +8,9 @@ from datetime import datetime
 from flask import (Blueprint, flash, redirect, render_template, request,
                    session, url_for)
 
-from app.models.database import Database
-from app.models.transaction import TransactionRepository
-from app.models.user import User
+from .models.database import Database
+from .models.transaction import TransactionRepository
+from .models.user import User
 
 # Create blueprint
 auth_bp = Blueprint("auth", __name__)

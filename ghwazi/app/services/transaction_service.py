@@ -5,10 +5,10 @@ Transaction service for processing emails and storing transaction data.
 import logging
 from typing import Any, Dict, List, Optional
 
-from app.models.database import Database
-from app.models.transaction import TransactionRepository
-from app.services.email_service import EmailService
-from app.services.parser_service import TransactionParser
+from .models.database import Database
+from .models.transaction import TransactionRepository
+from .services.email_service import EmailService
+from .services.parser_service import TransactionParser
 
 logger = logging.getLogger(__name__)
 
