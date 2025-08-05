@@ -2,7 +2,7 @@
 # This file includes the base requirements for running the application
 
 # Include base requirements
--r requirements/base.txt
+-r ghwazi/requirements/base.txt
 
 # Additional production-ready packages
 gunicorn==21.2.0
