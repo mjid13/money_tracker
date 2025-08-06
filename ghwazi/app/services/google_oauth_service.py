@@ -34,6 +34,23 @@ class GoogleOAuthService:
     def __init__(self):
         self.db = Database()
     
+    def get_redirect_uri(self) -> str:
+        """Get the correct redirect URI for OAuth callback."""
+        # Use environment variable if set
+        redirect_uri = current_app.config.get('GOOGLE_REDIRECT_URI')
+        if redirect_uri:
+            return redirect_uri
+        
+        # Fallback: generate from current request context
+        try:
+            return url_for('oauth.google_callback', _external=True)
+        except RuntimeError:
+            # If we're outside request context, use default for development
+            if current_app.config.get('FLASK_ENV') == 'development':
+                return 'http://localhost:5000/oauth/google/callback'
+            else:
+                raise ValueError("GOOGLE_REDIRECT_URI must be set in production")
+
     def get_authorization_url(self, state: str = None) -> str:
         """
         Generate Google OAuth authorization URL.
@@ -45,6 +62,8 @@ class GoogleOAuthService:
             Authorization URL for redirect
         """
         try:
+            redirect_uri = self.get_redirect_uri()
+            
             flow = Flow.from_client_config(
                 {
                     "web": {
@@ -52,13 +71,13 @@ class GoogleOAuthService:
                         "client_secret": current_app.config.get('GOOGLE_CLIENT_SECRET'),
                         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                         "token_uri": "https://oauth2.googleapis.com/token",
-                        "redirect_uris": [url_for('oauth.google_callback', _external=True)]
+                        "redirect_uris": [redirect_uri]
                     }
                 },
                 scopes=self.SCOPES
             )
             
-            flow.redirect_uri = url_for('oauth.google_callback', _external=True)
+            flow.redirect_uri = redirect_uri
             
             authorization_url, state = flow.authorization_url(
                 access_type='offline',
@@ -92,6 +111,8 @@ class GoogleOAuthService:
             if state != session.get('oauth_state'):
                 return False, "Invalid state parameter", None
             
+            redirect_uri = self.get_redirect_uri()
+            
             # Exchange code for tokens
             flow = Flow.from_client_config(
                 {
@@ -100,14 +121,14 @@ class GoogleOAuthService:
                         "client_secret": current_app.config.get('GOOGLE_CLIENT_SECRET'),
                         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                         "token_uri": "https://oauth2.googleapis.com/token",
-                        "redirect_uris": [url_for('oauth.google_callback', _external=True)]
+                        "redirect_uris": [redirect_uri]
                     }
                 },
                 scopes=self.SCOPES,
                 state=state
             )
             
-            flow.redirect_uri = url_for('oauth.google_callback', _external=True)
+            flow.redirect_uri = redirect_uri
             flow.fetch_token(code=code)
             
             credentials = flow.credentials
