@@ -140,12 +140,12 @@ class GoogleOAuthService:
                 return False, "Failed to retrieve user information", None
             
             # Store or update user OAuth data
-            oauth_user = self._create_or_update_oauth_user(credentials, user_info)
-            if not oauth_user:
+            oauth_user_data = self._create_or_update_oauth_user(credentials, user_info)
+            if not oauth_user_data:
                 return False, "Failed to create/update user OAuth data", None
-            
+
             return True, "OAuth authentication successful", {
-                'oauth_user': oauth_user,
+                'oauth_user': oauth_user_data,
                 'user_info': user_info
             }
             
@@ -187,26 +187,26 @@ class GoogleOAuthService:
             logger.error(f"Error getting user info: {e}")
             return None
     
-    def _create_or_update_oauth_user(self, credentials: Credentials, user_info: Dict) -> Optional[GoogleOAuthUser]:
+    def _create_or_update_oauth_user(self, credentials: Credentials, user_info: Dict) -> Optional[Dict]:
         """
         Create or update Google OAuth user record.
-        
+
         Args:
             credentials: Google OAuth credentials
             user_info: User information from Google
-            
+
         Returns:
-            GoogleOAuthUser instance or None
+            Dictionary with OAuth user data or None
         """
         db_session = self.db.get_session()
-        
+
         try:
             # Find existing OAuth user by Google ID
             google_user_id = user_info['id']
             oauth_user = db_session.query(GoogleOAuthUser).filter_by(
                 google_user_id=google_user_id
             ).first()
-            
+
             if oauth_user:
                 # Update existing OAuth user
                 oauth_user.email = user_info['email']
@@ -219,9 +219,9 @@ class GoogleOAuthService:
                     scope=credentials.scopes
                 )
                 oauth_user.is_active = True
-                
+
                 logger.info(f"Updated existing OAuth user: {oauth_user.email}")
-                
+
             else:
                 # Check if we need to link to existing app user
                 current_user_id = session.get('user_id')
@@ -243,9 +243,9 @@ class GoogleOAuthService:
                         )
                         db_session.add(user)
                         db_session.flush()  # Get user ID
-                        
+
                         logger.info(f"Created new app user: {user.email}")
-                
+
                 # Create new OAuth user
                 oauth_user = GoogleOAuthUser(
                     user_id=user.id,
@@ -254,16 +254,16 @@ class GoogleOAuthService:
                     name=user_info['name'],
                     picture=user_info['picture']
                 )
-                
+
                 oauth_user.update_tokens(
                     access_token=credentials.token,
                     refresh_token=credentials.refresh_token,
                     expires_in=3600,
                     scope=credentials.scopes
                 )
-                
+
                 db_session.add(oauth_user)
-                
+
                 # Flush to get the oauth_user.id before creating Gmail config
                 db_session.flush()
 
@@ -276,13 +276,28 @@ class GoogleOAuthService:
                     sync_frequency_hours=24
                 )
                 gmail_config.labels_list = ['INBOX']
-                
+
                 db_session.add(gmail_config)
-                
+
                 logger.info(f"Created new OAuth user: {oauth_user.email}")
-            
+
             db_session.commit()
-            return oauth_user
+
+            # Extract data before closing session
+            oauth_user_data = {
+                'id': oauth_user.id,
+                'user_id': oauth_user.user_id,
+                'google_user_id': oauth_user.google_user_id,
+                'email': oauth_user.email,
+                'name': oauth_user.name,
+                'picture': oauth_user.picture,
+                'is_active': oauth_user.is_active,
+                'access_token': oauth_user.access_token,
+                'refresh_token': oauth_user.refresh_token,
+                'scopes': oauth_user.scopes
+            }
+
+            return oauth_user_data
             
         except Exception as e:
             logger.error(f"Error creating/updating OAuth user: {e}")
