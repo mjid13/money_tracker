@@ -1,1 +1,1 @@
-web: gunicorn ghwazi.app:app
+web: gunicorn ghwazi.main:app
