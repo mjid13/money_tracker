@@ -26,9 +26,10 @@ class GoogleOAuthService:
     
     # Required OAuth scopes
     SCOPES = [
-        'https://www.googleapis.com/auth/gmail.readonly',
+        'openid',
         'https://www.googleapis.com/auth/userinfo.email',
-        'https://www.googleapis.com/auth/userinfo.profile'
+        'https://www.googleapis.com/auth/userinfo.profile',
+        'https://www.googleapis.com/auth/gmail.readonly'
     ]
     
     def __init__(self):
