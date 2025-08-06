@@ -260,7 +260,7 @@ function fetchCategoryChartData(accountNumber, dateRange, categoryType) {
     showLoadingForContainer(categoryChartContainer);
 
     // Fetch data from the server
-    fetch(`/get_category_chart_data?account_number=${accountNumber}&date_range=${dateRange}&category_type=${categoryType}`)
+    fetch(`/api/get_category_chart_data?account_number=${accountNumber}&date_range=${dateRange}&category_type=${categoryType}`)
         .then(response => {
             if (!response.ok) {
                 throw new Error('Network response was not ok');
@@ -388,7 +388,7 @@ function fetchChartData(accountNumber, dateRange) {
     });
 
     // Fetch data from the server
-    fetch(`/get_chart_data?account_number=${accountNumber}&date_range=${dateRange}`)
+    fetch(`/api/get_chart_data?account_number=${accountNumber}&date_range=${dateRange}`)
         .then(response => {
             if (!response.ok) {
                 throw new Error('Network response was not ok');

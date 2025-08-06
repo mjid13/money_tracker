@@ -25,6 +25,7 @@ class User(Base):
     # Relationships
     accounts = relationship("Account", back_populates="user")
     email_configs = relationship("EmailConfiguration", back_populates="user")
+    google_oauth = relationship("GoogleOAuthUser", back_populates="user", uselist=False)
 
     def set_password(self, password):
         """Set password hash."""
