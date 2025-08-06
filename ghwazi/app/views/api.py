@@ -43,7 +43,7 @@ def get_chart_data():
         # Import necessary modules for data aggregation
         from datetime import datetime, timedelta
 
-        from money_tracker.models.models import (Category, Transaction,
+        from ..models.models import (Category, Transaction,
                                                  TransactionType)
         from sqlalchemy import case, extract, func
 
