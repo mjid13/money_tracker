@@ -365,3 +365,15 @@ def results():
         return redirect(url_for("main.dashboard"))
 
     return render_template("main/results.html", transaction=transaction_data)
+
+
+@main_bp.route("/privacy-policy")
+def privacy_policy():
+    """Privacy policy page - publicly accessible."""
+    return render_template("main/privacy_policy.html", year=datetime.now().year)
+
+
+@main_bp.route("/terms-of-service")
+def terms_of_service():
+    """Terms of Service page - publicly accessible."""
+    return render_template("main/terms_of_service.html", year=datetime.now().year)
