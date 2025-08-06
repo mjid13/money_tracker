@@ -36,6 +36,13 @@ soupsieve==2.7
 # Cryptography (for security features)
 cryptography==45.0.5
 
+# Google OAuth and Gmail API
+google-auth==2.23.4
+google-auth-oauthlib==1.1.0
+google-auth-httplib2==0.1.1
+google-api-python-client==2.108.0
+flask-dance==7.0.0
+
 # HTTP requests (if you're making API calls)
 requests==2.32.4
 urllib3==2.5.0

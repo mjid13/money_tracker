@@ -55,6 +55,18 @@ class Config:
     # Pagination
     POSTS_PER_PAGE = int(os.environ.get("POSTS_PER_PAGE", 25))
 
+    # Google OAuth settings
+    GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+    
+    # OAuth security settings
+    OAUTH_CREDENTIAL_SECRETS = {
+        'google': {
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET,
+        }
+    }
+
     @staticmethod
     def init_app(app):
         """Initialize application with this configuration."""

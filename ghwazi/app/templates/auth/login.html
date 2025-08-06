@@ -38,18 +38,33 @@
                             <div class="invalid-feedback">Please enter your password.</div>
                         </div>
 
-                        <div class="d-grid mb-4">
+                        <div class="d-grid mb-3">
                             <button type="submit" class="btn btn-primary btn-lg">
                                 <i class="bi bi-box-arrow-in-right me-2"></i>Log In
                             </button>
                         </div>
-
-                        <div class="text-center">
-                            <p class="mb-0">Don't have an account?
-                                <a href="{{ url_for('auth.register') }}" class="text-decoration-none">Create one now</a>
-                            </p>
-                        </div>
                     </form>
+
+                    <!-- OAuth Divider -->
+                    <div class="position-relative my-4">
+                        <hr>
+                        <div class="position-absolute top-50 start-50 translate-middle bg-white px-3">
+                            <span class="text-muted small">or</span>
+                        </div>
+                    </div>
+
+                    <!-- Google Sign-in -->
+                    <div class="d-grid mb-4">
+                        <a href="{{ url_for('oauth.google_login') }}" class="btn btn-outline-danger btn-lg">
+                            <i class="bi bi-google me-2"></i>Sign in with Google
+                        </a>
+                    </div>
+
+                    <div class="text-center">
+                        <p class="mb-0">Don't have an account?
+                            <a href="{{ url_for('auth.register') }}" class="text-decoration-none">Create one now</a>
+                        </p>
+                    </div>
                 </div>
             </div>
 

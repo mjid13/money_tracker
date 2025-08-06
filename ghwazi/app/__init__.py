@@ -32,6 +32,7 @@ def create_app(config_class=Config):
     from .views.category import category_bp
     from .views.email import email_bp
     from .views.main import main_bp
+    from .views.oauth import oauth_bp
     from .views.transaction import transaction_bp
 
     app.register_blueprint(main_bp)
@@ -41,6 +42,7 @@ def create_app(config_class=Config):
     app.register_blueprint(account_bp, url_prefix="/account")
     app.register_blueprint(category_bp, url_prefix="/category")
     app.register_blueprint(email_bp, url_prefix="/email")
+    app.register_blueprint(oauth_bp, url_prefix="/oauth")
     app.register_blueprint(transaction_bp, url_prefix="/transaction")
 
     # Configure logging
