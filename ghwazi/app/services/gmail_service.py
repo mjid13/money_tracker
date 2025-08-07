@@ -14,7 +14,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from ..models.database import Database
-from ..models.oauth import GmailConfig, GoogleOAuthUser
+from ..models.oauth import EmailConfig, OAuthUser
 from .google_oauth_service import GoogleOAuthService
 
 logger = logging.getLogger(__name__)
@@ -27,12 +27,12 @@ class GmailService:
         self.db = Database()
         self.oauth_service = GoogleOAuthService()
     
-    def get_gmail_service(self, oauth_user: GoogleOAuthUser):
+    def get_gmail_service(self, oauth_user: OAuthUser):
         """
         Build Gmail API service with valid credentials.
         
         Args:
-            oauth_user: GoogleOAuthUser instance
+            oauth_user: OAuthUser instance
             
         Returns:
             Gmail service instance or None
@@ -48,12 +48,12 @@ class GmailService:
             logger.error(f"Error building Gmail service: {e}")
             return None
     
-    def get_user_profile(self, oauth_user: GoogleOAuthUser) -> Optional[Dict]:
+    def get_user_profile(self, oauth_user: OAuthUser) -> Optional[Dict]:
         """
         Get Gmail user profile information.
         
         Args:
-            oauth_user: GoogleOAuthUser instance
+            oauth_user: OAuthUser instance
             
         Returns:
             Profile information dict or None
@@ -77,12 +77,12 @@ class GmailService:
             logger.error(f"Error getting Gmail profile: {e}")
             return None
     
-    def list_labels(self, oauth_user: GoogleOAuthUser) -> List[Dict]:
+    def list_labels(self, oauth_user: OAuthUser) -> List[Dict]:
         """
         Get list of Gmail labels for user.
         
         Args:
-            oauth_user: GoogleOAuthUser instance
+            oauth_user: OAuthUser instance
             
         Returns:
             List of label dictionaries
@@ -113,14 +113,14 @@ class GmailService:
             logger.error(f"Error listing Gmail labels: {e}")
             return []
     
-    def search_messages(self, oauth_user: GoogleOAuthUser, gmail_config: GmailConfig, 
+    def search_messages(self, oauth_user: OAuthUser, gmail_config: EmailConfig, 
                        max_results: int = 50) -> List[Dict]:
         """
         Search for messages based on Gmail configuration.
         
         Args:
-            oauth_user: GoogleOAuthUser instance
-            gmail_config: GmailConfig instance
+            oauth_user: OAuthUser instance
+            gmail_config: EmailConfig instance
             max_results: Maximum number of messages to return
             
         Returns:
@@ -374,16 +374,18 @@ class GmailService:
         
         try:
             # Get OAuth user and Gmail config
-            oauth_user = db_session.query(GoogleOAuthUser).filter_by(
+            oauth_user = db_session.query(OAuthUser).filter_by(
                 user_id=user_id,
+                provider='google',
                 is_active=True
             ).first()
             
             if not oauth_user:
                 return False, "No Google OAuth connection found", {}
             
-            gmail_config = db_session.query(GmailConfig).filter_by(
+            gmail_config = db_session.query(EmailConfig).filter_by(
                 user_id=user_id,
+                provider='google',
                 enabled=True
             ).first()
             

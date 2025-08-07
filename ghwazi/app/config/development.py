@@ -18,6 +18,11 @@ class DevelopmentConfig(Config):
         os.environ.get("DEV_DATABASE_URL") or "sqlite:///dev_transactions.db"
     )
 
+    # Google OAuth client ID and secret (can be overridden by environment variable)
+    GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+    GOOGLE_REDIRECT_URI = "http://localhost:5000/oauth/google/callback"
+
     # Development logging
     LOG_LEVEL = "DEBUG"
 

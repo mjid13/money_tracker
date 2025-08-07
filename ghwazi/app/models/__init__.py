@@ -7,7 +7,14 @@ from .transaction import TransactionRepository
 from .user import User
 from .models import (Account, Bank, Category, CategoryMapping, CategoryType,
                      EmailConfiguration, Transaction)
-from .oauth import GoogleOAuthUser, GmailConfig
+from .oauth import OAuthUser, EmailConfig
+from .user import User
+
+__all__ = [
+    "OAuthUser",
+    "EmailConfig", 
+    "User",
+]
 
 __all__ = [
     "Database",
@@ -20,6 +27,6 @@ __all__ = [
     "CategoryMapping",
     "CategoryType",
     "Bank",
-    "GoogleOAuthUser",
-    "GmailConfig",
+    "EmailOAuthUser",
+    "EmailProviderConfig",
 ]

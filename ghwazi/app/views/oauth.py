@@ -7,7 +7,7 @@ from flask import (Blueprint, flash, redirect, render_template, request,
                    session, url_for, current_app, jsonify)
 
 from ..models.database import Database
-from ..models.oauth import GoogleOAuthUser, GmailConfig
+from ..models.oauth import OAuthUser, EmailConfig
 from ..models.user import User
 from ..services.google_oauth_service import GoogleOAuthService
 from ..services.gmail_service import GmailService
@@ -71,9 +71,10 @@ def google_callback():
         # Log in the user
         session['user_id'] = oauth_user['user_id']
         session['google_oauth'] = True
+        session['username'] = oauth_user['name']
         session.permanent = True
 
-        flash(f"Successfully connected with Google account: {oauth_user['email']}", "success")
+        flash(f"Successfully connected with Google account: {oauth_user['name']}", "success")
         logger.info(f"User {oauth_user['user_id']} logged in via Google OAuth")
         
         # Redirect to dashboard
@@ -124,7 +125,7 @@ def gmail_settings():
     try:
         # Get OAuth user and Gmail config
         oauth_user = oauth_service.get_oauth_user_by_user_id(user_id)
-        gmail_config = oauth_service.get_gmail_config(user_id)
+        email_config = oauth_service.get_email_config(user_id)
         
         # Get Gmail profile and labels if connected
         profile = None
@@ -137,7 +138,7 @@ def gmail_settings():
         return render_template(
             "oauth/gmail_settings.html",
             oauth_user=oauth_user,
-            gmail_config=gmail_config,
+            email_config=email_config,
             profile=profile,
             labels=labels
         )
@@ -155,47 +156,51 @@ def update_gmail_settings():
     user_id = session.get('user_id')
     
     try:
-        # Get Gmail config
-        gmail_config = oauth_service.get_gmail_config(user_id)
-        if not gmail_config:
-            flash("Gmail integration not found.", "error")
-            return redirect(url_for("oauth.gmail_settings"))
-        
         db_session = db.get_session()
-        
+
         try:
+            # Get Email config within the same session
+            email_config = db_session.query(EmailConfig).filter_by(
+                user_id=user_id,
+                provider='google'
+            ).first()
+
+            if not email_config:
+                flash("Email integration not found.", "error")
+                return redirect(url_for("oauth.gmail_settings"))
+
             # Update settings
-            gmail_config.enabled = request.form.get('enabled') == 'on'
-            gmail_config.auto_sync = request.form.get('auto_sync') == 'on'
-            
+            email_config.enabled = request.form.get('enabled') == 'on'
+            email_config.auto_sync = request.form.get('auto_sync') == 'on'
+
             # Update sync frequency
             try:
-                gmail_config.sync_frequency_hours = int(request.form.get('sync_frequency_hours', 24))
+                email_config.sync_frequency_hours = int(request.form.get('sync_frequency_hours', 24))
             except ValueError:
-                gmail_config.sync_frequency_hours = 24
-            
+                email_config.sync_frequency_hours = 24
+
             # Update label filters
             selected_labels = request.form.getlist('labels')
             if selected_labels:
-                gmail_config.labels_list = selected_labels
-            
+                email_config.labels_list = selected_labels
+
             # Update sender filters
             sender_filters = request.form.get('sender_filters', '').strip()
             if sender_filters:
-                gmail_config.sender_filter_list = [
+                email_config.sender_filter_list = [
                     f.strip() for f in sender_filters.split('\n') if f.strip()
                 ]
             else:
-                gmail_config.sender_filter_list = []
-            
+                email_config.sender_filter_list = []
+
             # Update subject filters
             subject_filters = request.form.get('subject_filters', '').strip()
             if subject_filters:
-                gmail_config.subject_filter_list = [
+                email_config.subject_filter_list = [
                     f.strip() for f in subject_filters.split('\n') if f.strip()
                 ]
             else:
-                gmail_config.subject_filter_list = []
+                email_config.subject_filter_list = []
             
             db_session.commit()
             flash("Gmail settings updated successfully.", "success")
@@ -222,8 +227,8 @@ def sync_gmail():
     
     try:
         # Check if sync is already in progress
-        gmail_config = oauth_service.get_gmail_config(user_id)
-        if gmail_config and gmail_config.sync_status == 'syncing':
+        email_config = oauth_service.get_email_config(user_id)
+        if email_config and email_config.sync_status == 'syncing':
             return jsonify({
                 'success': False,
                 'message': 'Gmail sync is already in progress'
@@ -254,16 +259,16 @@ def gmail_status():
     
     try:
         oauth_user = oauth_service.get_oauth_user_by_user_id(user_id)
-        gmail_config = oauth_service.get_gmail_config(user_id)
-        
+        email_config = oauth_service.get_email_config(user_id)
+
         status = {
             'connected': oauth_user is not None and oauth_user.is_active,
-            'enabled': gmail_config.enabled if gmail_config else False,
-            'auto_sync': gmail_config.auto_sync if gmail_config else False,
-            'last_sync': gmail_config.last_sync_at.isoformat() if gmail_config and gmail_config.last_sync_at else None,
-            'sync_status': gmail_config.sync_status if gmail_config else 'idle',
-            'sync_error': gmail_config.sync_error if gmail_config else None,
-            'needs_sync': gmail_config.needs_sync if gmail_config else False,
+            'enabled': email_config.enabled if email_config else False,
+            'auto_sync': email_config.auto_sync if email_config else False,
+            'last_sync': email_config.last_sync_at.isoformat() if email_config and email_config.last_sync_at else None,
+            'sync_status': email_config.sync_status if email_config else 'idle',
+            'sync_error': email_config.sync_error if email_config else None,
+            'needs_sync': email_config.needs_sync if email_config else False,
             'token_expired': oauth_user.is_token_expired if oauth_user else True,
             'needs_refresh': oauth_user.needs_refresh if oauth_user else True
         }

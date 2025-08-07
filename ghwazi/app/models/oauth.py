@@ -1,5 +1,6 @@
 """
-Google OAuth models for user authentication and token management.
+OAuth models for user authentication and token management.
+Supports multiple OAuth providers (Google, Microsoft, etc.) and their email configurations.
 """
 
 import base64
@@ -7,20 +8,23 @@ import json
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 from flask import current_app
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .database import Base
 from .user import User
 
 
-class GoogleOAuthUser(Base):
-    """Model to store Google OAuth user information and tokens."""
-    
-    __tablename__ = 'google_oauth_users'
+class OAuthUser(Base):
+    """Model to store OAuth user information and tokens for various providers."""
+
+    __tablename__ = 'oauth_users'
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, unique=True)
-    google_user_id = Column(String(255), nullable=False, unique=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    
+    # Provider information
+    provider = Column(String(50), nullable=False, default='google')  # google, microsoft, yahoo, etc.
+    provider_user_id = Column(String(255), nullable=False)  # User ID from the OAuth provider
     email = Column(String(255), nullable=False)
     name = Column(String(255), nullable=False)
     picture = Column(String(500))
@@ -39,8 +43,14 @@ class GoogleOAuthUser(Base):
     is_active = Column(Boolean, default=True)
     
     # Relationships
-    user = relationship("User", back_populates="google_oauth")
-    gmail_configs = relationship("GmailConfig", back_populates="oauth_user", cascade="all, delete-orphan")
+    user = relationship("User", back_populates="oauth_users")
+    email_configs = relationship("EmailConfig", back_populates="oauth_user", cascade="all, delete-orphan")
+    
+    # Unique constraints
+    __table_args__ = (
+        UniqueConstraint('user_id', 'provider', name='uq_user_provider'),
+        UniqueConstraint('provider', 'provider_user_id', name='uq_provider_user_id'),
+    )
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -155,12 +165,23 @@ class GoogleOAuthUser(Base):
         self.is_active = False
         self.updated_at = datetime.utcnow()
     
+    @property
+    def is_google(self):
+        """Check if this is a Google OAuth user."""
+        return self.provider == 'google'
+    
+    @property
+    def is_microsoft(self):
+        """Check if this is a Microsoft OAuth user."""
+        return self.provider == 'microsoft'
+    
     def to_dict(self):
         """Convert to dictionary (without sensitive data)."""
         return {
             'id': self.id,
             'user_id': self.user_id,
-            'google_user_id': self.google_user_id,
+            'provider': self.provider,
+            'provider_user_id': self.provider_user_id,
             'email': self.email,
             'name': self.name,
             'picture': self.picture,
@@ -174,25 +195,28 @@ class GoogleOAuthUser(Base):
         }
     
     def __repr__(self):
-        return f'<GoogleOAuthUser {self.email}>'
+        return f'<OAuthUser {self.provider}:{self.email}>'
 
 
-class GmailConfig(Base):
-    """Configuration for Gmail API integration per user."""
-    
-    __tablename__ = 'gmail_configs'
-    
+class EmailConfig(Base):
+    """Configuration for email provider API integration per user (Gmail, Outlook, etc.)."""
+
+    __tablename__ = 'email_configs'
+
     id = Column(Integer, primary_key=True)
-    oauth_user_id = Column(Integer, ForeignKey('google_oauth_users.id'), nullable=False)
+    oauth_user_id = Column(Integer, ForeignKey('oauth_users.id'), nullable=False)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)  # For convenience
     
-    # Gmail API settings
+    # Provider information
+    provider = Column(String(50), nullable=False, default='google')  # google, microsoft, yahoo, etc.
+    
+    # Email API settings
     enabled = Column(Boolean, default=True)
     auto_sync = Column(Boolean, default=False)
     sync_frequency_hours = Column(Integer, default=24)  # How often to sync
     
-    # Email filtering settings
-    labels_to_sync = Column(Text)  # JSON list of Gmail labels to sync
+    # Email filtering settings - JSON fields to support different provider formats
+    labels_to_sync = Column(Text)  # JSON list of labels/folders to sync
     sender_filters = Column(Text)  # JSON list of sender email patterns
     subject_filters = Column(Text)  # JSON list of subject patterns
     
@@ -207,26 +231,49 @@ class GmailConfig(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    oauth_user = relationship("GoogleOAuthUser", back_populates="gmail_configs")
+    oauth_user = relationship("OAuthUser", back_populates="email_configs")
     user = relationship("User")
+    
+    # Unique constraint
+    __table_args__ = (
+        UniqueConstraint('oauth_user_id', 'provider', name='uq_oauth_user_provider'),
+    )
+    
+    @property
+    def is_google(self):
+        """Check if this is a Google provider config."""
+        return self.provider == 'google'
+    
+    @property
+    def is_microsoft(self):
+        """Check if this is a Microsoft provider config."""
+        return self.provider == 'microsoft'
     
     @property
     def labels_list(self):
-        """Get list of Gmail labels to sync."""
+        """Get list of labels/folders to sync."""
         if not self.labels_to_sync:
-            return ['INBOX']  # Default to inbox
+            # Default based on provider
+            if self.is_google:
+                return ['INBOX']
+            elif self.is_microsoft:
+                return ['Inbox']
+            else:
+                return ['INBOX']
         try:
             return json.loads(self.labels_to_sync)
         except (json.JSONDecodeError, TypeError):
-            return ['INBOX']
+            return ['INBOX'] if self.is_google else ['Inbox']
     
     @labels_list.setter
     def labels_list(self, labels):
-        """Set list of Gmail labels to sync."""
+        """Set list of labels/folders to sync."""
         if isinstance(labels, list):
             self.labels_to_sync = json.dumps(labels)
         else:
-            self.labels_to_sync = json.dumps(['INBOX'])
+            # Default based on provider
+            default_label = 'INBOX' if self.is_google else 'Inbox'
+            self.labels_to_sync = json.dumps([default_label])
     
     @property
     def sender_filter_list(self):
@@ -310,4 +357,4 @@ class GmailConfig(Base):
         }
     
     def __repr__(self):
-        return f'<GmailConfig user_id={self.user_id} enabled={self.enabled}>'
+        return f'<EmailConfig {self.provider} user_id={self.user_id} enabled={self.enabled}>'

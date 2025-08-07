@@ -15,7 +15,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from ..models.database import Database
-from ..models.oauth import GoogleOAuthUser, GmailConfig
+from ..models.oauth import OAuthUser, EmailConfig
 from ..models.user import User
 
 logger = logging.getLogger(__name__)
@@ -203,8 +203,9 @@ class GoogleOAuthService:
         try:
             # Find existing OAuth user by Google ID
             google_user_id = user_info['id']
-            oauth_user = db_session.query(GoogleOAuthUser).filter_by(
-                google_user_id=google_user_id
+            oauth_user = db_session.query(OAuthUser).filter_by(
+                provider='google',
+                provider_user_id=google_user_id
             ).first()
 
             if oauth_user:
@@ -247,9 +248,10 @@ class GoogleOAuthService:
                         logger.info(f"Created new app user: {user.email}")
 
                 # Create new OAuth user
-                oauth_user = GoogleOAuthUser(
+                oauth_user = OAuthUser(
                     user_id=user.id,
-                    google_user_id=google_user_id,
+                    provider='google',
+                    provider_user_id=google_user_id,
                     email=user_info['email'],
                     name=user_info['name'],
                     picture=user_info['picture']
@@ -267,17 +269,18 @@ class GoogleOAuthService:
                 # Flush to get the oauth_user.id before creating Gmail config
                 db_session.flush()
 
-                # Create default Gmail config
-                gmail_config = GmailConfig(
+                # Create default Email config
+                email_config = EmailConfig(
                     oauth_user_id=oauth_user.id,
                     user_id=user.id,
+                    provider='google',
                     enabled=True,
                     auto_sync=False,
                     sync_frequency_hours=24
                 )
-                gmail_config.labels_list = ['INBOX']
+                email_config.labels_list = ['INBOX']
 
-                db_session.add(gmail_config)
+                db_session.add(email_config)
 
                 logger.info(f"Created new OAuth user: {oauth_user.email}")
 
@@ -287,7 +290,7 @@ class GoogleOAuthService:
             oauth_user_data = {
                 'id': oauth_user.id,
                 'user_id': oauth_user.user_id,
-                'google_user_id': oauth_user.google_user_id,
+                'provider_user_id': oauth_user.provider_user_id,
                 'email': oauth_user.email,
                 'name': oauth_user.name,
                 'picture': oauth_user.picture,
@@ -306,12 +309,12 @@ class GoogleOAuthService:
         finally:
             self.db.close_session(db_session)
     
-    def refresh_access_token(self, oauth_user: GoogleOAuthUser) -> bool:
+    def refresh_access_token(self, oauth_user: OAuthUser) -> bool:
         """
         Refresh OAuth access token for user.
-        
+
         Args:
-            oauth_user: GoogleOAuthUser instance
+            oauth_user: OAuthUser instance
             
         Returns:
             True if token refreshed successfully
@@ -358,12 +361,12 @@ class GoogleOAuthService:
             logger.error(f"Error refreshing access token: {e}")
             return False
     
-    def get_valid_credentials(self, oauth_user: GoogleOAuthUser) -> Optional[Credentials]:
+    def get_valid_credentials(self, oauth_user: OAuthUser) -> Optional[Credentials]:
         """
         Get valid OAuth credentials, refreshing if necessary.
-        
+
         Args:
-            oauth_user: GoogleOAuthUser instance
+            oauth_user: OAuthUser instance
             
         Returns:
             Valid Credentials or None
@@ -392,12 +395,12 @@ class GoogleOAuthService:
             logger.error(f"Error creating credentials: {e}")
             return None
     
-    def revoke_oauth_access(self, oauth_user: GoogleOAuthUser) -> bool:
+    def revoke_oauth_access(self, oauth_user: OAuthUser) -> bool:
         """
         Revoke OAuth access for user.
-        
+
         Args:
-            oauth_user: GoogleOAuthUser instance
+            oauth_user: OAuthUser instance
             
         Returns:
             True if revoked successfully
@@ -434,37 +437,41 @@ class GoogleOAuthService:
             logger.error(f"Error revoking OAuth access: {e}")
             return False
     
-    def get_oauth_user_by_user_id(self, user_id: int) -> Optional[GoogleOAuthUser]:
+    def get_oauth_user_by_user_id(self, user_id: int) -> Optional[OAuthUser]:
         """
         Get Google OAuth user by app user ID.
-        
+
         Args:
             user_id: App user ID
-            
+
         Returns:
-            GoogleOAuthUser instance or None
+            OAuthUser instance or None
         """
         db_session = self.db.get_session()
         try:
-            return db_session.query(GoogleOAuthUser).filter_by(
+            return db_session.query(OAuthUser).filter_by(
                 user_id=user_id,
+                provider='google',
                 is_active=True
             ).first()
         finally:
             self.db.close_session(db_session)
     
-    def get_gmail_config(self, user_id: int) -> Optional[GmailConfig]:
+    def get_email_config(self, user_id: int) -> Optional[EmailConfig]:
         """
-        Get Gmail configuration for user.
-        
+        Get Email configuration for user.
+
         Args:
             user_id: App user ID
-            
+
         Returns:
-            GmailConfig instance or None
+            EmailConfig instance or None
         """
         db_session = self.db.get_session()
         try:
-            return db_session.query(GmailConfig).filter_by(user_id=user_id).first()
+            return db_session.query(EmailConfig).filter_by(
+                user_id=user_id,
+                provider='google'
+            ).first()
         finally:
             self.db.close_session(db_session)
