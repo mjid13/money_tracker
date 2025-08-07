@@ -8,25 +8,18 @@ from .user import User
 from .models import (Account, Bank, Category, CategoryMapping, CategoryType,
                      EmailConfiguration, Transaction)
 from .oauth import OAuthUser, EmailConfig
-from .user import User
-
-__all__ = [
-    "OAuthUser",
-    "EmailConfig", 
-    "User",
-]
 
 __all__ = [
     "Database",
     "TransactionRepository",
     "User",
     "Account",
-    "EmailConfiguration",
+    "EmailConfiguration", 
     "Transaction",
     "Category",
     "CategoryMapping",
     "CategoryType",
     "Bank",
-    "EmailOAuthUser",
-    "EmailProviderConfig",
+    "OAuthUser",
+    "EmailConfig",
 ]
