@@ -504,12 +504,15 @@ class GmailService:
 
             # Try to parse transaction data using the parser service
             parsed = self.parser.parse_email(message, subject)
-
+            logger.error(f"this the account number: {account_number} and thie the parsed: {parsed.get("account_number")}")
             if parsed:
                 if account_number[-4:] not in parsed.get("account_number"):
                     return transactions
+
+                # Add user_id, account_number, and email_metadata_id to transaction data
+                parsed["user_id"] = user_id
+                parsed["account_number"] = account_number
                 # Find the appropriate account for this transaction
-                account_number = parsed.get('account_number')
                 account = None
 
                 email_metadata = self.transaction_repo.create_email_metadata(
@@ -528,9 +531,7 @@ class GmailService:
                 if email_metadata:
                     parsed["email_metadata_id"] = email_metadata.id
 
-                # Add user_id, account_number, and email_metadata_id to transaction data
-                parsed["user_id"] = user_id
-                parsed["account_number"] = account_number
+
                 if account_number:
                     # Try to find existing account by account number
                     account = db_session.query(Account).filter_by(
@@ -543,75 +544,12 @@ class GmailService:
                     account = db_session.query(Account).filter_by(user_id=user_id).first()
 
                 if account:
-                    # Map transaction type string to TransactionType enum
-                    # parsed_type = (parsed.get('transaction_type') or 'unknown').strip().lower()
-                    # if parsed_type == 'income':
-                    #     tx_type = TransactionType.INCOME
-                    # elif parsed_type == 'expense':
-                    #     tx_type = TransactionType.EXPENSE
-                    # elif parsed_type == 'transfer':
-                    #     tx_type = TransactionType.TRANSFER
-                    # else:
-                    #     tx_type = TransactionType.UNKNOWN
-                    #
-                    # # Determine currency from parsed data or account/bank defaults
-                    # currency = parsed.get('currency') or getattr(account, 'currency', None)
-                    # if not currency and getattr(account, 'bank', None):
-                    #     currency = getattr(account.bank, 'currency', None)
-                    # currency = currency or 'OMR'
-                    #
-                    # # Create transaction data for database insertion aligned with model
-                    # transaction = {
-                    #     'account_id': account.id,
-                    #     'amount': parsed.get('amount', 0.0),
-                    #     'transaction_type': tx_type,
-                    #     'currency': currency,
-                    #     'value_date': parsed.get('transaction_date') or message_dt,
-                    #     'transaction_id': parsed.get('transaction_id'),
-                    #     'category_id': None,  # Categorization can be applied later
-                    #     'transaction_details': parsed.get('description', subject),
-                    #     'country': parsed.get('country'),
-                    #     'transaction_content': clean_text or body_text,
-                    #     'created_at': datetime.now()
-                    # }
-                    #
-                    # # Optional meta for account updates (not a Transaction column)
-                    # if 'balance_after' in parsed:
-                    #     transaction['balance_after'] = parsed.get('balance_after')
-
-                    # Check for duplicate transactions
                     transaction = self.transaction_repo.create_transaction(
                         db_session, parsed
                     )
-                    # if transaction.get('transaction_id'):
-                    #     query = query.filter_by(transaction_id=transaction['transaction_id'])
-                    # else:
-                    #     # Fall back to matching on details if no transaction_id
-                    #     details = transaction.get('transaction_details')
-                    #     if details is not None:
-                    #         query = query.filter_by(transaction_details=details)
-                    #
-                    # existing = query.first()
 
-                    # if not existing:
                     if transaction:
                         transactions.append(transaction)
-                        try:
-                            # Handle both ORM object and dict for logging
-                            amount = getattr(transaction, 'amount', None)
-                            if amount is None:
-                                amount = transaction.get('amount')
-                            tx_type = getattr(transaction, 'transaction_type', None)
-                            if tx_type is None:
-                                tx_type = transaction.get('transaction_type')
-                            # If enum, get value
-                            tx_type_str = getattr(tx_type, 'value', tx_type)
-                            value_date = getattr(transaction, 'value_date', None)
-                            if value_date is None:
-                                value_date = transaction.get('value_date')
-                            logger.info(f"Extracted transaction: {amount} {tx_type_str} on {value_date}")
-                        except Exception:
-                            logger.info("Extracted a transaction")
                     else:
                         # Duplicate or failed creation
                         try:

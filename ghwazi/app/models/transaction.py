@@ -270,6 +270,7 @@ class TransactionRepository:
                 "currency": transaction_data.get("currency", "OMR"),
                 "balance": transaction_data.get("balance", 0.0),
             }
+            logger.error(f'creating account data: {account_data}')
             account = TransactionRepository.create_account(session, account_data)
 
             # Update account branch only if it's null and branch is provided in transaction data
@@ -552,7 +553,7 @@ class TransactionRepository:
             return None
 
     @staticmethod
-    def get_user_accounts(session: Session, user_id: int) -> List[Account]:
+    def get_user_accounts(session: Session, user_id: int) -> list[type[Account]] | list[Any]:
         """
         Get all accounts for a user.
 
