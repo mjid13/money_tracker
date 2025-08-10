@@ -6,8 +6,11 @@ from sqlalchemy.orm import Session
 
 from .models import (Account, Category, CategoryMapping, CategoryType,
                      Counterparty, CounterpartyCategory, Transaction)
-from ..services.default_categories import suggest_category, normalize_text
 
+try:
+    from ..services.default_categories import suggest_category, normalize_text
+except ImportError:
+    from ghwazi.app.services.default_categories import suggest_category, normalize_text
 logger = logging.getLogger(__name__)
 
 
