@@ -19,7 +19,9 @@ class Config:
     # Database settings
     SQLALCHEMY_DATABASE_URI = (
         os.environ.get("DATABASE_URL") or "sqlite:///transactions.db"
-    )
+    ).replace(
+    "postgres://", "postgresql://"
+)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Email settings

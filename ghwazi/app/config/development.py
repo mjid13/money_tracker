@@ -16,7 +16,9 @@ class DevelopmentConfig(Config):
     # Development database (can be overridden by environment variable)
     SQLALCHEMY_DATABASE_URI = (
         os.environ.get("DEV_DATABASE_URL") or "sqlite:///dev_transactions.db"
-    )
+    ).replace(
+    "postgres://", "postgresql://"
+)
 
     # Google OAuth client ID and secret (can be overridden by environment variable)
     GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")

@@ -17,7 +17,9 @@ class ProductionConfig(Config):
     SQLALCHEMY_DATABASE_URI = (
         os.environ.get("DATABASE_URL")
         or "postgresql://user:password@localhost/production_db"
-    )
+    ).replace(
+    "postgres://", "postgresql://"
+)
     DATABASE_URL = os.getenv("DATABASE_URL", "")
 
     # Production logging
