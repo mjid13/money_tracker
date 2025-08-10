@@ -47,11 +47,7 @@ class GoogleOAuthService:
         try:
             return url_for('oauth.google_callback', _external=True)
         except RuntimeError:
-            # If we're outside request context, use default for development
-            if current_app.config.get('FLASK_ENV') == 'development':
-                return 'http://localhost:5000/oauth/google/callback'
-            else:
-                raise ValueError("GOOGLE_REDIRECT_URI must be set in production")
+            raise ValueError("GOOGLE_REDIRECT_URI must be set in production")
 
     def get_authorization_url(self, state: str = None) -> str:
         """
