@@ -47,46 +47,42 @@ class EmailSync:
         self.gmail_service = GmailService()
         self.config = config or EmailSyncConfig()
 
-    def create_sync(self, user_id: int, account: Account) -> Tuple[bool, str]:
+    def create_sync(self, user_id: int, account_data: dict) -> Tuple[bool, str]:
         """
         Configure email filters based on the bank associated with the account.
         
         Args:
             user_id: User ID
-            account: Account object that was just created
+            account_data: dict with keys 'bank_id' and 'account_number'
             
         Returns:
             Tuple of (success, message)
         """
         # Input validation
         if not isinstance(user_id, int) or user_id <= 0:
-            logger.error(f"Invalid user_id: must be a positive integer")
+            logger.error("Invalid user_id: must be a positive integer")
             return False, "Invalid user_id: must be a positive integer"
-        
-        if not account:
-            logger.error(f"Account object is required")
-            return False, "Account object is required"
-        
-        if not hasattr(account, 'bank_id') or not hasattr(account, 'account_number'):
-            logger.error(f"Invalid account object: missing required attributes")
-            return False, "Invalid account object: missing required attributes"
+        if not isinstance(account_data, dict):
+            logger.error("Invalid account_data: expected dict")
+            return False, "Invalid account_data: expected dict"
+
+        account_number = account_data.get('account_number') if account_data else None
+        bank_id = account_data.get('bank_id') if account_data else None
+        if not account_number or not bank_id:
+            logger.error("Invalid account_data: missing account_number or bank_id")
+            return False, "Invalid account_data: missing account_number or bank_id"
         
         db_session = self.db.get_session()
         
         try:
             # Get the bank information
-            if not account.bank_id:
-                logger.error(f"Account has no associated bank for email configuration")
-                return False, "Account has no associated bank for email configuration"
-            
-            bank = db_session.query(Bank).filter_by(id=account.bank_id).first()
+            bank = db_session.query(Bank).filter_by(id=bank_id).first()
             if not bank:
-                logger.error(f"Bank not found for email configuration")
+                logger.error("Bank not found for email configuration")
                 return False, "Bank not found for email configuration"
             
-            logger.info(f"Configuring email filters for account {account.account_number} with bank {bank.name}")
+            logger.info(f"Configuring email filters for account {account_number} with bank {bank.name}")
             
-
             oauth_user = db_session.query(OAuthUser).filter_by(
                 user_id=user_id,
                 provider='google',
@@ -128,7 +124,7 @@ class EmailSync:
                 logger.info(f"Created new email configuration for user {user_id}")
 
                 db_session.commit()
-                logger.info(f"Successfully configured email filters for account {account.account_number}")
+                logger.info(f"Successfully configured email filters for account {account_number}")
                 return True, "Email filters configured successfully"
             else:
                 # Update existing configuration to include bank filters if missing
@@ -184,13 +180,13 @@ class EmailSync:
             self.db.close_session(db_session)
 
     
-    def trigger_initial_sync(self, user_id: int, account: Account) -> Tuple[bool, str, dict]:
+    def trigger_initial_sync(self, user_id: int, account_number: str) -> Tuple[bool, str, dict]:
         """
         Trigger an initial Gmail sync for the newly added account.
         
         Args:
             user_id: User ID
-            account: Account object that was just created
+            account_number: The account number to sync messages for
             
         Returns:
             Tuple of (success, message, stats)
@@ -198,24 +194,20 @@ class EmailSync:
         # Input validation
         if not isinstance(user_id, int) or user_id <= 0:
             return False, "Invalid user_id: must be a positive integer", {}
-        
-        if not account:
-            return False, "Account object is required", {}
-        
-        if not hasattr(account, 'account_number'):
-            return False, "Invalid account object: missing account_number", {}
+        if not isinstance(account_number, str) or not account_number.strip():
+            return False, "Invalid account_number: must be a non-empty string", {}
         
         try:
-            logger.info(f"Triggering initial Gmail sync for account {account.account_number}")
+            logger.info(f"Triggering initial Gmail sync for account {account_number}")
             
             # Use the Gmail service to sync messages
-            success, message, stats = self.gmail_service.sync_gmail_messages(user_id, account.account_number)
+            success, message, stats = self.gmail_service.sync_gmail_messages(user_id, account_number)
 
             # Log outcome safely without assuming stats keys exist
             if success:
-                logger.info(f"Initial sync completed for account {account.account_number}: {message}")
+                logger.info(f"Initial sync completed for account {account_number}: {message}")
             else:
-                logger.warning(f"Initial sync failed for account {account.account_number}: {message}")
+                logger.warning(f"Initial sync failed for account {account_number}: {message}")
 
             if isinstance(stats, dict) and stats:
                 found = stats.get('messages_found')
@@ -235,7 +227,7 @@ class EmailSync:
             logger.error(f"Unexpected error triggering initial sync: {e}")
             return False, f"Unexpected error triggering initial sync: {str(e)}", {}
     
-    def process_new_account(self, user_id: int, account: Account) -> dict:
+    def process_new_account(self, user_id: int, account_data: dict) -> dict:
         """
         Complete process for handling a newly created account:
         1. Configure email filters based on bank data
@@ -243,7 +235,7 @@ class EmailSync:
         
         Args:
             user_id: User ID
-            account: Account object that was just created
+            account_data: dict with keys 'account_number' and 'bank_id'
             
         Returns:
             Dictionary with results of both operations
@@ -257,11 +249,21 @@ class EmailSync:
                 'sync_stats': {}
             }
         
-        if not account:
+        if not isinstance(account_data, dict):
             return {
                 'filters_configured': False,
                 'sync_triggered': False,
-                'messages': ['Account object is required'],
+                'messages': ['Invalid account_data: expected dict'],
+                'sync_stats': {}
+            }
+
+        account_number = account_data.get('account_number')
+        bank_id = account_data.get('bank_id')
+        if not account_number or not bank_id:
+            return {
+                'filters_configured': False,
+                'sync_triggered': False,
+                'messages': ['Invalid account_data: missing account_number or bank_id'],
                 'sync_stats': {}
             }
         
@@ -274,20 +276,20 @@ class EmailSync:
         
         try:
             # Step 1: Configure email filters
-            filter_success, filter_message = self.create_sync(user_id, account)
+            filter_success, filter_message = self.create_sync(user_id, {'account_number': account_number, 'bank_id': bank_id})
             results['filters_configured'] = filter_success
             results['messages'].append(f"Email filters: {filter_message}")
             
             if filter_success:
-                logger.info(f"Email filters configured successfully for account {account.account_number}")
+                logger.info(f"Email filters configured successfully for account {account_number}")
                 # Step 2: Trigger initial sync (only if filters were configured successfully)
-                sync_success, sync_message, sync_stats = self.trigger_initial_sync(user_id, account)
+                sync_success, sync_message, sync_stats = self.trigger_initial_sync(user_id, account_number)
                 results['sync_triggered'] = sync_success
                 results['messages'].append(f"Initial sync: {sync_message}")
                 results['sync_stats'] = sync_stats
                 
-                if sync_success and sync_stats.get('messages_found', 0) > 0:
-                    results['messages'].append(f"Found {sync_stats['messages_found']} emails, processed {sync_stats['messages_processed']}")
+                if sync_success and isinstance(sync_stats, dict) and sync_stats.get('messages_found', 0) > 0:
+                    results['messages'].append(f"Found {sync_stats['messages_found']} emails, processed {sync_stats.get('messages_processed', 0)}")
             
         except Exception as e:
             logger.error(f"Error processing new account: {e}")

@@ -185,7 +185,10 @@ def add_account():
 
                 # Auto-configure email filters and sync if account was created successfully
                 auto_sync_service = EmailSync()
-                sync_results = auto_sync_service.process_new_account(user_id, account)
+                sync_results = auto_sync_service.process_new_account(
+                    user_id,
+                    {'account_number': account_data.get('account_number'), 'bank_id': account_data.get('bank_id')}
+                )
                 
                 # Flash success message with sync results
                 success_message = "Account added successfully"
