@@ -299,6 +299,7 @@ class TransactionParser:
         if date_match:
             data["date"] = date_match.group(1).strip()
 
+
         # Transaction details keywords: e.g., TRANSFER, Cash Dep, SALARY, Mobile Payment
         # We'll pick the first occurrence from a known list, case-insensitive
         txn_details_list = [
@@ -385,7 +386,6 @@ class TransactionParser:
             extracted_data = self.extract_bank_email_data(clean_text)
             logger.error(f"Extracted data: {extracted_data}")
 
-
             # Convert to the format expected by the rest of the system
             transaction_data = {
                 "bank_name": bank_name,
@@ -423,6 +423,11 @@ class TransactionParser:
                     transaction_date = self._parse_date(extracted_data["date"])
                     if transaction_date:
                         transaction_data["value_date"] = transaction_date
+                    else:
+                        date_value = datetime.fromisoformat(email_data.get("date"))
+                        # Convert to UTC
+                        utc_date = date_value.utctimetuple()
+                        transaction_data["value_date"] = datetime(*utc_date[:6])
                 except Exception as e:
                     logger.warning(
                         f"Failed to parse date '{extracted_data['date']}': {str(e)}"
@@ -661,7 +666,7 @@ def parse_bank_email(email_text: str) -> Optional[Dict[str, Any]]:
 
 text = """Dear Customer, Your Debit card number 4837**** ****1518 has been utilised as follows: Account number : xxxx0019 Description : 998232-JENAN TEA MUTT Amount : OMR 0.2 Date/Time : 14 JUL 25 11:01 Transaction Country : Oman Kind Regards, Bank Muscat To unsubscribe / modify the email alert service please contact your nearest Branch / ARM or contact bank muscat Call Center at 24795555. This e-mail is confidential and may also be legally privileged. If you are not the intended recipient, please notify us immediately. You should not copy, forward, disclose or use it for any purpose either partly or completely. If you have received this message by error, please delete all its copies from your system and notify us by e-mail to care@bankmuscat.com. Internet communications cannot be guaranteed to be timely, secure, error or virus-free. Also, the Web/ IT/ Email administrator might not allow emails with attachments, thus the sender does not accept liability for any errors or omissions.
 """
-#
+
 # output = parse_bank_email(text)
 # for i,j in output.items():
 #
