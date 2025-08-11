@@ -93,9 +93,20 @@ def create_app(config_class=Config):
 
     @app.before_request
     def before_request():
-        """Ensure user session is handled properly."""
+        """Ensure user session is handled properly and proactively cleanup DB sessions."""
         # Make session permanent
         session.permanent = True
+
+        # Proactively cleanup any lingering sessions at the start of the request
+        try:
+            db.session.remove()
+        except Exception as e:
+            app.logger.debug(f"Flask-SQLAlchemy session pre-clean error: {e}")
+        try:
+            from .models.database import Database
+            Database.remove_scoped_session()
+        except Exception as e:
+            app.logger.debug(f"Custom Database scoped session pre-clean error: {e}")
 
         # Check if user is logged in and update session timestamp
         if "user_id" in session:
@@ -126,10 +137,37 @@ def create_app(config_class=Config):
 
     @app.after_request
     def after_request(response):
-        """Add security headers to response."""
+        """Add security headers to response and cleanup DB sessions."""
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["X-XSS-Protection"] = "1; mode=block"
+
+        # Request-level DB session cleanup
+        try:
+            # Flask-SQLAlchemy session
+            db.session.remove()
+        except Exception as e:
+            app.logger.debug(f"Flask-SQLAlchemy session remove error: {e}")
+        try:
+            # Custom SQLAlchemy scoped session used by services
+            from .models.database import Database
+            Database.remove_scoped_session()
+        except Exception as e:
+            app.logger.debug(f"Custom Database scoped session remove error: {e}")
+
         return response
+
+    @app.teardown_appcontext
+    def shutdown_session(exception=None):
+        """Ensure sessions are removed at the end of the app context."""
+        try:
+            db.session.remove()
+        except Exception as e:
+            app.logger.debug(f"Flask-SQLAlchemy teardown remove error: {e}")
+        try:
+            from .models.database import Database
+            Database.remove_scoped_session()
+        except Exception as e:
+            app.logger.debug(f"Custom Database teardown remove error: {e}")
 
     return app

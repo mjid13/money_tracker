@@ -19,6 +19,12 @@ Base = declarative_base()
 class Database:
     """Database connection and session management."""
 
+    # Class-level shared engine and session registry to avoid multiple pools per process
+    _engine = None
+    _session_factory = None
+    _Session = None
+    _database_url = None
+
     def __init__(self, database_url=None):
         """
         Initialize database connection.
@@ -28,24 +34,52 @@ class Database:
                                          uses the URL from settings.
         """
         self.database_url = database_url or settings.DATABASE_URL
-        self.engine = None
-        self.session_factory = None
-        self.Session = None
+        # Instance references mirror class-level singletons
+        self.engine = Database._engine
+        self.session_factory = Database._session_factory
+        self.Session = Database._Session
 
     def connect(self):
         """
-        Connect to the database and create session factory.
+        Connect to the database and create session factory with pooling optimized for Heroku Postgres.
 
         Returns:
             bool: True if connection is successful, False otherwise.
         """
         try:
-            # Create engine
-            self.engine = create_engine(self.database_url)
+            # Reuse class-level engine/session if already initialized and URL hasn't changed
+            if Database._engine is not None and Database._database_url == self.database_url:
+                self.engine = Database._engine
+                self.session_factory = Database._session_factory
+                self.Session = Database._Session
+                logger.debug("Reusing existing database engine and session factory")
+                return True
+
+            # Determine if Postgres to apply pooling options
+            url_lower = (self.database_url or "").lower()
+            is_postgres = url_lower.startswith("postgresql") or url_lower.startswith("postgres")
+
+            if is_postgres:
+                self.engine = create_engine(
+                    self.database_url,
+                    pool_size=5,
+                    max_overflow=10,
+                    pool_recycle=3600,
+                    pool_pre_ping=True,
+                )
+            else:
+                # Fallback for other dialects (e.g., sqlite) without explicit pooling
+                self.engine = create_engine(self.database_url, pool_pre_ping=True)
 
             # Create session factory
             self.session_factory = sessionmaker(bind=self.engine)
             self.Session = scoped_session(self.session_factory)
+
+            # Persist class-level singletons
+            Database._engine = self.engine
+            Database._session_factory = self.session_factory
+            Database._Session = self.Session
+            Database._database_url = self.database_url
 
             logger.info(f"Connected to database: {self.database_url}")
             return True
@@ -726,3 +760,28 @@ class Database:
             session.close()
         except Exception as e:
             logger.error(f"Error closing database session: {str(e)}")
+
+    def close(self):
+        """
+        Cleanup sessions associated with this Database instance.
+        For shared engine/pool, we do not dispose the engine here to avoid affecting other instances.
+        """
+        try:
+            # Remove scoped session to return connection to pool
+            if self.Session is not None:
+                try:
+                    self.Session.remove()
+                except Exception as e:
+                    logger.debug(f"Scoped session remove error (safe to ignore if no session): {e}")
+            logger.info("Database sessions cleaned up")
+        except Exception as e:
+            logger.error(f"Error during database cleanup: {str(e)}")
+
+    @classmethod
+    def remove_scoped_session(cls):
+        """Remove the class-level scoped session if present (request-level cleanup)."""
+        try:
+            if cls._Session is not None:
+                cls._Session.remove()
+        except Exception as e:
+            logger.debug(f"Error removing class-level scoped session: {e}")

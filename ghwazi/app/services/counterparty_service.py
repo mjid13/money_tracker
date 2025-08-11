@@ -26,6 +26,22 @@ class CounterpartyService:
         self.db.create_tables()
         self.category_service = CategoryService()
 
+    # Context manager support
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            self.close()
+        finally:
+            return False
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
     def get_unique_counterparties(
         self, user_id: int, account_number: str = None
     ) -> List[Dict[str, Any]]:

@@ -22,6 +22,23 @@ class CategoryService:
         self.db.connect()
         self.db.create_tables()
 
+    # Context manager support
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            self.close()
+        finally:
+            # Do not suppress exceptions
+            return False
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
     def create_category(
         self, user_id: int, name: str, description: str = None, color: str = None
     ) -> Optional[Category]:
