@@ -101,7 +101,9 @@ class Database:
                 self.engine = create_engine(self.database_url, pool_pre_ping=True)
 
             # Create session factory
-            self.session_factory = sessionmaker(bind=self.engine)
+            # Use expire_on_commit=False so ORM instances keep loaded attributes after commit.
+            # This prevents DetachedInstanceError in templates when sessions are closed.
+            self.session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
             self.Session = scoped_session(self.session_factory)
 
             # Persist class-level singletons
@@ -795,3 +797,9 @@ class Database:
                 cls._Session.remove()
         except Exception as e:
             logger.debug(f"Error removing class-level scoped session: {e}")
+
+
+
+def get_database():
+    """Convenience accessor for the singleton Database instance."""
+    return Database()

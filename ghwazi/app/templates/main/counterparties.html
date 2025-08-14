@@ -196,7 +196,7 @@
 
 {% block extra_js %}
 {% if counterparties %}
-<script>
+<script nonce="{{ csp_nonce() }}">
     document.addEventListener('DOMContentLoaded', function() {
         // Handle categorize modal
         var categorizeModal = document.getElementById('categorizeModal');

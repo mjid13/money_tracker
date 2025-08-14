@@ -88,7 +88,7 @@
     }
 </style>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 // Countdown timer for retry button
 let countdown = 60;
 const retryBtn = document.getElementById('retryBtn');

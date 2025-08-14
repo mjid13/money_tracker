@@ -346,3 +346,72 @@ def acknowledge_alert(alert_id: str):
     except Exception as e:
         logger.error(f"Failed to acknowledge alert {alert_id}: {e}")
         return jsonify({'error': 'Failed to acknowledge alert'}), 500
+
+
+@session_bp.route("/database/stats")
+@login_required
+def database_session_stats():
+    """Get database session management statistics."""
+    user_id = session.get("user_id")
+    
+    # Admin only
+    if user_id != 1:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from ..utils.db_session_manager import get_session_manager
+        
+        session_manager = get_session_manager()
+        stats = session_manager.get_session_stats()
+        
+        # Add additional database info
+        from ..models.database import Database
+        db = Database()
+        
+        # Add Flask-SQLAlchemy stats if available
+        try:
+            from .. import db as flask_db
+            flask_stats = {
+                'flask_sqlalchemy_active': True,
+                'pool_size': getattr(flask_db.engine.pool, 'size', 'unknown'),
+                'checked_out_connections': getattr(flask_db.engine.pool, 'checkedout', 'unknown'),
+                'overflow_connections': getattr(flask_db.engine.pool, 'overflow', 'unknown'),
+            }
+        except Exception:
+            flask_stats = {'flask_sqlalchemy_active': False}
+        
+        return jsonify({
+            'session_manager_stats': stats,
+            'flask_sqlalchemy_stats': flask_stats,
+            'database_url_type': 'sqlite' if 'sqlite' in str(db.database_url).lower() else 'postgresql'
+        })
+        
+    except Exception as e:
+        logger.error(f"Failed to get database session stats: {e}")
+        return jsonify({'error': 'Failed to retrieve database stats'}), 500
+
+
+@session_bp.route("/database/cleanup", methods=["POST"])
+@login_required
+def database_force_cleanup():
+    """Force cleanup of leaked database sessions (admin only)."""
+    user_id = session.get("user_id")
+    
+    # Admin only
+    if user_id != 1:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        from ..utils.db_session_manager import get_session_manager
+        
+        session_manager = get_session_manager()
+        cleaned_count = session_manager.force_cleanup_leaked_sessions()
+        
+        return jsonify({
+            'message': f'Cleaned up {cleaned_count} leaked sessions',
+            'cleaned_count': cleaned_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Failed to force cleanup database sessions: {e}")
+        return jsonify({'error': 'Failed to cleanup database sessions'}), 500

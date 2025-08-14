@@ -339,3 +339,23 @@ class SessionService:
         except Exception as e:
             logger.error(f"Failed to invalidate session {session_id[:8]}...: {e}")
             return False
+    
+    @classmethod
+    def get_active_session_count(cls) -> int:
+        """Get the number of currently active sessions."""
+        try:
+            active_count = sum(1 for session_data in cls._active_sessions.values() 
+                             if session_data.get('is_active', True))
+            return active_count
+        except Exception as e:
+            logger.error(f"Failed to get active session count: {e}")
+            return 0
+    
+    @classmethod
+    def get_total_session_count(cls) -> int:
+        """Get the total number of sessions (active and inactive)."""
+        try:
+            return len(cls._active_sessions)
+        except Exception as e:
+            logger.error(f"Failed to get total session count: {e}")
+            return 0

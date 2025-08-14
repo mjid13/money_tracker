@@ -21,6 +21,9 @@ def create_app(config_class=Config):
     """Create and configure the Flask application."""
     app = Flask(__name__)
     app.config.from_object(config_class)
+    
+    # Set application start time for uptime tracking
+    app.config['START_TIME'] = time.time()
 
     # Initialize extensions
     db.init_app(app)
@@ -50,6 +53,7 @@ def create_app(config_class=Config):
     from .views.auth import auth_bp
     from .views.category import category_bp
     from .views.email import email_bp
+    from .views.health import health_bp
     from .views.main import main_bp
     from .views.oauth import oauth_bp
     from .views.session import session_bp
@@ -62,13 +66,15 @@ def create_app(config_class=Config):
     app.register_blueprint(account_bp, url_prefix="/account")
     app.register_blueprint(category_bp, url_prefix="/category")
     app.register_blueprint(email_bp, url_prefix="/email")
+    app.register_blueprint(health_bp, url_prefix="/health")
     app.register_blueprint(oauth_bp, url_prefix="/oauth")
     app.register_blueprint(session_bp, url_prefix="/session")
     app.register_blueprint(transaction_bp, url_prefix="/transaction")
 
-    # Exempt API blueprint from CSRF (use token/headers if added later)
+    # Exempt API and health blueprints from CSRF (use token/headers if added later)
     try:
         csrf.exempt(api_bp)
+        csrf.exempt(health_bp)  # Health checks should be accessible without CSRF
     except Exception:
         pass
 

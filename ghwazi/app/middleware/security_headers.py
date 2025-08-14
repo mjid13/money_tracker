@@ -121,6 +121,7 @@ class SecurityHeadersConfig:
                 "'self'",
                 'http://localhost:*',
                 'ws://localhost:*',
+                "'unsafe-inline'",
             ],
         }
     

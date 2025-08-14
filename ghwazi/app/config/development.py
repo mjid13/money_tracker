@@ -12,8 +12,20 @@ class DevelopmentConfig(Config):
 
     DEBUG = True
     TESTING = False
-
-    # Development database (can be overridden by environment variable)
+    SECURITY_HEADERS = {
+        'FRAME_OPTIONS': 'SAMEORIGIN',
+    }
+    CSP_DOMAINS = {
+        'script_src': [
+            "'unsafe-inline'",
+            "'unsafe-eval'",
+            "*",  # Very permissive for debugging - remove in production
+        ],
+        'script_src_attr': [
+            "'unsafe-inline'",
+        ]
+    }
+        # Development database (can be overridden by environment variable)
     SQLALCHEMY_DATABASE_URI = (
         os.environ.get("DEV_DATABASE_URL") or "sqlite:///dev_transactions.db"
     ).replace(
