@@ -40,6 +40,11 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
     limiter.init_app(app)
+    # Honor configuration to enable/disable rate limiting (e.g., in TestingConfig)
+    try:
+        limiter.enabled = app.config.get('RATELIMIT_ENABLED', True)
+    except Exception:
+        pass
     csrf.init_app(app)
 
     # Register blueprints
