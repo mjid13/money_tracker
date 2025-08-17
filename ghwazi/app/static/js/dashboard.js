@@ -10,8 +10,8 @@ document.addEventListener('DOMContentLoaded', function() {
     initPdfUploadForm();
     
     // Initialize mode switching
-    initModeSwitching();
-    
+    // initModeSwitching();
+
     // Initialize email task status checking
     initEmailTaskStatusChecking();
 });
@@ -150,7 +150,7 @@ function initModeSwitching() {
     const uploadModeLink = document.querySelector('a[href*="?mode=upload"]');
     
     if (!emailModeLink || !uploadModeLink) {
-        console.error('Mode switching links not found');
+        // Mode switching links are optional; quietly skip if not present
         return;
     }
     

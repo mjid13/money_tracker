@@ -13,6 +13,38 @@ class ProductionConfig(Config):
     DEBUG = False
     TESTING = False
 
+    SECURITY_HEADERS = {
+        'FRAME_OPTIONS': 'SAMEORIGIN',
+    }
+
+    # Clean CSP configuration that works with nonces
+    CSP_DOMAINS = {
+        'default_src': ["'self'"],
+        'script_src': [
+            "'self'",
+            "https://cdn.jsdelivr.net",
+            "https://code.jquery.com",
+            "https://cdn.datatables.net",
+        ],
+        'style_src': [
+            "'self'",
+            "https://cdn.jsdelivr.net",
+            "https://fonts.googleapis.com",
+        ],
+        'img_src': [
+            "'self'",
+            "data:",
+            "https:",
+        ],
+        'font_src': [
+            "'self'",
+            "https://fonts.gstatic.com",
+        ],
+        'connect_src': [
+            "'self'",
+        ]
+    }
+
     # Production database (must be set via environment variable)
     SQLALCHEMY_DATABASE_URI = (
         os.environ.get("DATABASE_URL")

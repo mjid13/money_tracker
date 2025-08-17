@@ -16,14 +16,39 @@ class DevelopmentConfig(Config):
         'FRAME_OPTIONS': 'SAMEORIGIN',
     }
     CSP_DOMAINS = {
+        'default_src': ["'self'"],
         'script_src': [
-            "'unsafe-inline'",
-            "'unsafe-eval'",
-            "*",  # Very permissive for debugging - remove in production
+            "'self'",
+            'https://cdn.jsdelivr.net',
+            'https://code.jquery.com',
+            'https://cdn.datatables.net',
+            'http://localhost:5000',
+            'http://localhost:3000',
+            'ws://localhost:3000',
+            'ws://localhost:5000',
         ],
-        'script_src_attr': [
-            "'unsafe-inline'",
-        ]
+        'style_src': [
+            "'self'",
+            'https://cdn.jsdelivr.net',
+            'https://fonts.googleapis.com',
+            'https://cdn.datatables.net',
+        ],
+        'img_src': [
+            "'self'",
+            'data:',
+            'https:',
+        ],
+        'font_src': [
+            "'self'",
+            'https://fonts.gstatic.com',
+        ],
+        'connect_src': [
+            "'self'",
+            'http://localhost:5000',
+            'http://localhost:3000',
+            'ws://localhost:3000',
+            'ws://localhost:5000',
+        ],
     }
         # Development database (can be overridden by environment variable)
     SQLALCHEMY_DATABASE_URI = (

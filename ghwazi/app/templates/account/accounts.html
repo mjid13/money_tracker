@@ -137,7 +137,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function(){
   // Adaptive backoff poller to avoid server rate limits
   let baseDelay = 90000; // 90s base to stay under 50/hour

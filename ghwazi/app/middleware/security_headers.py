@@ -66,7 +66,7 @@ class SecurityHeadersConfig:
             'default_src': ["'self'"],
             'script_src': [
                 "'self'",
-                "'unsafe-inline'",  # Required for inline scripts - use nonces in production
+                "'strict-dynamic'",
                 'https://cdn.jsdelivr.net',
                 'https://code.jquery.com',
                 'https://cdn.datatables.net',
@@ -74,10 +74,22 @@ class SecurityHeadersConfig:
             ],
             'style_src': [
                 "'self'",
-                "'unsafe-inline'",  # Required for inline styles
                 'https://cdn.jsdelivr.net',
                 'https://cdn.datatables.net',
                 'https://fonts.googleapis.com',
+            ],
+            'style_src_attr': [
+                # Allow inline style attributes to avoid breaking layout, but keep style elements nonce-protected
+                "'unsafe-inline'",
+            ],
+            'style_src_elem': [
+                "'self'",
+                'https://cdn.jsdelivr.net',
+                'https://cdn.datatables.net',
+                'https://fonts.googleapis.com',
+                # Allow inline <style> elements for libraries that inject styles (DataTables, etc.)
+                # This addresses CSP style-src-elem violations while keeping attributes controlled separately.
+                "'unsafe-inline'",
             ],
             'font_src': [
                 "'self'",
@@ -105,23 +117,24 @@ class SecurityHeadersConfig:
         
         # Environment-specific overrides
         self.development_overrides = {
-            # More permissive CSP for development
+            # Reasonable CSP for development without wildcards or unsafe-inline/eval
             'script_src': [
                 "'self'",
-                "'unsafe-inline'",
-                "'unsafe-eval'",  # For development tools
                 'https://cdn.jsdelivr.net',
                 'https://code.jquery.com',
                 'https://cdn.datatables.net',
                 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.2',
-                'http://localhost:*',
-                'ws://localhost:*',  # For hot reload
+                'http://localhost:3000',
+                'http://localhost:5000',
+                'ws://localhost:3000',
+                'ws://localhost:5000',
             ],
             'connect_src': [
                 "'self'",
-                'http://localhost:*',
-                'ws://localhost:*',
-                "'unsafe-inline'",
+                'http://localhost:3000',
+                'http://localhost:5000',
+                'ws://localhost:3000',
+                'ws://localhost:5000',
             ],
         }
     
@@ -138,13 +151,19 @@ class SecurityHeadersConfig:
         return '; '.join(hsts_parts)
     
     def get_csp_header(self, nonce: str = None, environment: str = 'production') -> str:
-        """Generate Content Security Policy header string."""
-        csp_config = self.csp_config.copy()
+        """Generate Content Security Policy header string.
+        Ensures a per-request nonce is applied without mutating the base config and
+        deduplicates sources to avoid header bloat across requests.
+        """
+        import copy
+        # Deep copy so nested lists are not shared/mutated across requests
+        csp_config = copy.deepcopy(self.csp_config)
         
-        # Apply development overrides if in development
+        # Apply development overrides if in development (override specific directives)
         if environment == 'development':
             for directive, sources in self.development_overrides.items():
-                csp_config[directive] = sources
+                # Use a copy to avoid accidental sharing
+                csp_config[directive] = list(sources)
         
         # Add nonce to script-src if provided
         if nonce:
@@ -152,6 +171,17 @@ class SecurityHeadersConfig:
             if f"'nonce-{nonce}'" not in script_src:
                 script_src.insert(0, f"'nonce-{nonce}'")
                 csp_config['script_src'] = script_src
+        
+        # Deduplicate sources while preserving order
+        for directive, sources in list(csp_config.items()):
+            if isinstance(sources, list):
+                seen = set()
+                deduped = []
+                for s in sources:
+                    if s not in seen:
+                        seen.add(s)
+                        deduped.append(s)
+                csp_config[directive] = deduped
         
         # Build CSP string
         csp_parts = []

@@ -234,127 +234,14 @@
 
 {% block extra_js %}
 <!-- Include Chart.js with plugins -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script nonce="{{ csp_nonce() }}" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+<script nonce="{{ csp_nonce() }}" src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 
 <!-- Include custom JavaScript files -->
-<script src="{{ url_for('static', filename='js/forms.js') }}"></script>
-<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
-<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script nonce="{{ csp_nonce() }}" src="{{ url_for('static', filename='js/forms.js') }}"></script>
+<script nonce="{{ csp_nonce() }}" src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script nonce="{{ csp_nonce() }}" src="{{ url_for('static', filename='js/charts.js') }}"></script>
 
 <div id="chart-data-holder" data-json='{{ chart_data|tojson }}' style="display:none"></div>
-<!-- Pass chart data to JavaScript and initialize -->
-<script nonce="{{ csp_nonce() }}">
-    // Parse chart data safely from hidden holder to avoid inline JSON issues
-    let chartData = {};
-    try {
-        const holder = document.getElementById('chart-data-holder');
-        const raw = holder ? holder.getAttribute('data-json') : '{}';
-        chartData = JSON.parse(raw || '{}');
-    } catch (e) {
-        console.warn('Failed to parse chart data', e);
-        chartData = {};
-    }
-    window.chartData = chartData;
-
-    // Add console logging to debug
-    console.log('Chart data from server:', window.chartData);
-    console.log('Chart data type:', typeof window.chartData);
-
-    // Initialize dashboard functionality
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log('Dashboard DOM loaded');
-
-        // Add event listener for auto-categorize form
-        const autoCategorizeForm = document.querySelector('.auto-categorize-form');
-        if (autoCategorizeForm) {
-            const autoCategorizeBtn = autoCategorizeForm.querySelector('.auto-categorize-btn');
-            autoCategorizeForm.addEventListener('submit', function(e) {
-                if (!confirm('Auto-categorize all uncategorized transactions?')) {
-                    e.preventDefault();
-                    return false;
-                }
-            });
-        }
-
-        // Initialize charts if data is available
-        if (window.chartData && Object.keys(window.chartData).length > 0) {
-            console.log('Initializing charts with data');
-            if (typeof initDashboardCharts === 'function') {
-                initDashboardCharts(window.chartData);
-            } else {
-                console.error('initDashboardCharts function not found');
-            }
-        } else {
-            console.warn('No chart data available for initialization');
-        }
-
-        // Poll syncing status for each account to toggle the badge with adaptive backoff
-        let baseDelay = 90000; // 90s base (under 50/hour)
-        let maxDelay = 300000; // 5 minutes
-        let currentDelay = baseDelay;
-        let pollTimeout = null;
-        function scheduleNext(delay){
-            if(pollTimeout) clearTimeout(pollTimeout);
-            pollTimeout = setTimeout(pollSyncBadges, delay);
-        }
-        function pollSyncBadges(){
-            const els = document.querySelectorAll('.account-sync-badge');
-            if(!els || els.length === 0){
-                currentDelay = baseDelay;
-                return scheduleNext(currentDelay);
-            }
-            let had429 = false;
-            let pending = els.length;
-            els.forEach(function(el){
-                const acc = el.getAttribute('data-account-number');
-                if(!acc){ if(--pending === 0) finalize(); return; }
-                fetch(`/account/accounts/${encodeURIComponent(acc)}/sync-status`, {credentials:'same-origin'})
-                    .then(r => {
-                        if(r.status === 429){ had429 = true; return null; }
-                        if(!r.ok) return null;
-                        return r.json();
-                    })
-                    .then(data => {
-                        if(data){
-                            const st = (data && data.status) || 'none';
-                            if(st === 'pending' || st === 'running'){
-                                el.classList.remove('d-none');
-                            } else {
-                                el.classList.add('d-none');
-                            }
-                        }
-                    })
-                    .catch(() => {})
-                    .finally(() => {
-                        if(--pending === 0) finalize();
-                    });
-            });
-            function finalize(){
-                currentDelay = had429 ? Math.min(currentDelay * 2, maxDelay) : baseDelay;
-                scheduleNext(currentDelay);
-            }
-        }
-        // Start polling immediately and then adapt
-        pollSyncBadges();
-
-        // Highlight newly added account (if acc param is present)
-        try {
-            const params = new URLSearchParams(window.location.search);
-            const newAcc = params.get('acc');
-            if (newAcc) {
-                const selector = '.account-item[data-account-number="' + newAcc.replace(/"/g, '\\"') + '"]';
-                const el = document.querySelector(selector);
-                if (el) {
-                    el.classList.add('border-primary');
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    setTimeout(() => el.classList.remove('border-primary'), 4000);
-                }
-            }
-        } catch (e) {
-            console.warn('Highlight error:', e);
-        }
-
-    });
-</script>
+<script nonce="{{ csp_nonce() }}" src="{{ url_for('static', filename='js/dashboard_page_init.js') }}"></script>
 {% endblock %}

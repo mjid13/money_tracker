@@ -82,6 +82,14 @@ function ensureCategoryFilterStyles() {
     const style = document.createElement('style');
     style.id = 'category-filter-styles';
     style.type = 'text/css';
+    try {
+        const meta = document.querySelector('meta[name="csp-nonce"]');
+        if (meta && meta.content) {
+            style.nonce = meta.content;
+        }
+    } catch (e) {
+        console.warn('Unable to set CSP nonce on style tag:', e);
+    }
     style.appendChild(document.createTextNode(CATEGORY_FILTER_STYLES));
     document.head.appendChild(style);
 }

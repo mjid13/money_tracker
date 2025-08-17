@@ -251,7 +251,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 document.addEventListener('DOMContentLoaded', function() {
     const syncNowBtn = document.getElementById('sync-now-btn');
     const syncResultModal = new bootstrap.Modal(document.getElementById('syncResultModal'));
