@@ -14,6 +14,7 @@ from .views.email import email_tasks, email_tasks_lock, scraping_accounts
 
 from .config.base import Config
 from .extensions import db, migrate, limiter, csrf
+from .utils.safe_session_interface import SafeCookieSessionInterface
 from flask_wtf.csrf import CSRFError, generate_csrf
 
 # Optional Redis session support
@@ -93,6 +94,11 @@ def _initialize_session_management(app):
             app.config['SESSION_COOKIE_HTTPONLY'] = True
             app.config['SESSION_COOKIE_SAMESITE'] = app.config.get('SESSION_COOKIE_SAMESITE', 'Lax')
             FlaskSession(app)
+            # Wrap the session interface to ensure cookie values are strings
+            try:
+                app.session_interface = SafeCookieSessionInterface(app.session_interface)
+            except Exception as _e:
+                app.logger.debug(f"SafeCookieSessionInterface wrap failed (Redis): {_e}")
             app.logger.info('Flask-Session initialized with Redis backend')
 
         elif FlaskSession:
@@ -112,6 +118,11 @@ def _initialize_session_management(app):
             app.config['SESSION_PERMANENT'] = True
             app.config['SESSION_USE_SIGNER'] = True
             FlaskSession(app)
+            # Wrap the session interface to ensure cookie values are strings
+            try:
+                app.session_interface = SafeCookieSessionInterface(app.session_interface)
+            except Exception as _e:
+                app.logger.debug(f"SafeCookieSessionInterface wrap failed (filesystem): {_e}")
             app.logger.info(f'Flask-Session initialized with filesystem backend at {app.config["SESSION_FILE_DIR"]}')
 
         else:
