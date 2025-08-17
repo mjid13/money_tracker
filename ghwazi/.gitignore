@@ -172,4 +172,4 @@ tmp/
 
 # Configuration files with sensitive data
 config.ini
-settings.ini
+settings.ini.idea/
