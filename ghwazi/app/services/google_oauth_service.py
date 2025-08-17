@@ -287,34 +287,54 @@ class GoogleOAuthService:
         except Exception as e:
             logger.error(f"Error creating/updating OAuth user: {e}")
             return None
-    
+
     def refresh_access_token(self, oauth_user: OAuthUser) -> bool:
         """
         Refresh OAuth access token for user.
 
         Args:
             oauth_user: OAuthUser instance
-            
+
         Returns:
             True if token refreshed successfully
         """
         if not oauth_user.refresh_token:
             logger.error(f"No refresh token available for user {oauth_user.email}")
             return False
-        
+
         try:
+            # Import current_app here and handle context issues
+            from flask import current_app
+
+            # Try to get config from current_app, fallback to environment variables
+            try:
+                client_id = current_app.config.get('GOOGLE_CLIENT_ID')
+                client_secret = current_app.config.get('GOOGLE_CLIENT_SECRET')
+            except RuntimeError as e:
+                if "Working outside of application context" in str(e):
+                    # Fallback to environment variables when outside app context
+                    import os
+                    client_id = os.environ.get('GOOGLE_CLIENT_ID')
+                    client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
+
+                    if not client_id or not client_secret:
+                        logger.error("Google OAuth credentials not found in app config or environment variables")
+                        return False
+                else:
+                    raise e
+
             credentials = Credentials(
                 token=oauth_user.access_token,
                 refresh_token=oauth_user.refresh_token,
                 token_uri="https://oauth2.googleapis.com/token",
-                client_id=current_app.config.get('GOOGLE_CLIENT_ID'),
-                client_secret=current_app.config.get('GOOGLE_CLIENT_SECRET'),
+                client_id=client_id,
+                client_secret=client_secret,
                 scopes=oauth_user.scopes
             )
-            
+
             # Refresh the token
             credentials.refresh(Request())
-            
+
             # Update stored tokens
             with database_session() as db_session:
                 oauth_user.update_tokens(
@@ -323,48 +343,70 @@ class GoogleOAuthService:
                     expires_in=3600,
                     scope=credentials.scopes
                 )
-                
+
                 logger.info(f"Refreshed access token for user {oauth_user.email}")
                 return True
-                
+
         except Exception as e:
             logger.error(f"Error refreshing access token: {e}")
             return False
-    
+
     def get_valid_credentials(self, oauth_user: OAuthUser) -> Optional[Credentials]:
         """
         Get valid OAuth credentials, refreshing if necessary.
 
         Args:
             oauth_user: OAuthUser instance
-            
+
         Returns:
             Valid Credentials or None
         """
         if not oauth_user or not oauth_user.is_active:
             return None
-        
+
         # Check if token needs refresh
         if oauth_user.needs_refresh:
             if not self.refresh_access_token(oauth_user):
                 return None
-        
+
         try:
+            # Import current_app here and handle context issues
+            from flask import current_app
+
+            # Try to get config from current_app, fallback to environment variables
+            try:
+                client_id = current_app.config.get('GOOGLE_CLIENT_ID')
+                client_secret = current_app.config.get('GOOGLE_CLIENT_SECRET')
+            except RuntimeError as e:
+                if "Working outside of application context" in str(e):
+                    # Fallback to environment variables when outside app context
+                    import os
+                    client_id = os.environ.get('GOOGLE_CLIENT_ID')
+                    client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
+
+                    if not client_id or not client_secret:
+                        logger.error("Google OAuth credentials not found in app config or environment variables")
+                        return None
+                else:
+                    raise e
+
             credentials = Credentials(
                 token=oauth_user.access_token,
                 refresh_token=oauth_user.refresh_token,
                 token_uri="https://oauth2.googleapis.com/token",
-                client_id=current_app.config.get('GOOGLE_CLIENT_ID'),
-                client_secret=current_app.config.get('GOOGLE_CLIENT_SECRET'),
+                client_id=client_id,
+                client_secret=client_secret,
                 scopes=oauth_user.scopes
             )
-            
+
             return credentials
-            
+
         except Exception as e:
             logger.error(f"Error creating credentials: {e}")
             return None
-    
+
+
+
     def revoke_oauth_access(self, oauth_user: OAuthUser) -> bool:
         """
         Revoke OAuth access for user.

@@ -189,7 +189,7 @@ function initEmailTaskStatusChecking() {
  */
 function pollAllEmailTasks() {
     // Send AJAX request to get status of all tasks
-    Ajax.get('/email_processing_status', function(response) {
+    Ajax.get('/email/email_processing_status', function(response) {
         if (response.tasks && Object.keys(response.tasks).length > 0) {
             // Update UI for each task
             for (const [accountNumber, task] of Object.entries(response.tasks)) {
@@ -209,7 +209,7 @@ function pollAllEmailTasks() {
  * @param {string} taskId - The ID of the task to poll
  */
 function pollEmailTaskStatus(taskId) {
-    Ajax.get(`/email_task_status/${taskId}`, function(response) {
+    Ajax.get(`/email/task/${taskId}/status`, function(response) {
         if (response.status && response.status !== 'completed' && response.status !== 'failed') {
             // Update UI
             if (response.account_number) {

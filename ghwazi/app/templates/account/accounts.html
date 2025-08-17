@@ -109,9 +109,6 @@
                     <a href="{{ url_for('account.add_account') }}" class="btn btn-primary">
                         <i class="bi bi-plus-circle me-2"></i>Add Account
                     </a>
-                    <a href="{{ url_for('main.index') }}" class="btn btn-outline-primary">
-                        <i class="bi bi-envelope me-2"></i>Parse Email
-                    </a>
                 </div>
             </div>
         {% endif %}
@@ -142,26 +139,70 @@
 {% block extra_js %}
 <script>
 (function(){
+  // Adaptive backoff poller to avoid server rate limits
+  let baseDelay = 90000; // 90s base to stay under 50/hour
+  let maxDelay = 300000; // 5 minutes
+  let currentDelay = baseDelay;
+  let pollTimeout = null;
+
+  function scheduleNext(delay){
+    if(pollTimeout) clearTimeout(pollTimeout);
+    pollTimeout = setTimeout(pollSyncBadges, delay);
+  }
+
   function pollSyncBadges(){
     const els = document.querySelectorAll('.account-sync-badge');
+    if(!els || els.length === 0){
+      // Nothing to poll; try again later at base delay
+      currentDelay = baseDelay;
+      return scheduleNext(currentDelay);
+    }
+
+    let had429 = false;
+    let pending = els.length;
+
     els.forEach(function(el){
       const acc = el.getAttribute('data-account-number');
-      if(!acc) return;
-      fetch(`/accounts/${encodeURIComponent(acc)}/sync-status`, {credentials:'same-origin'})
-        .then(r => r.ok ? r.json() : Promise.reject())
+      if(!acc){ if(--pending === 0) finalize(); return; }
+
+      fetch(`/account/accounts/${encodeURIComponent(acc)}/sync-status`, {credentials:'same-origin'})
+        .then(r => {
+          if(r.status === 429){
+            had429 = true;
+            return null;
+          }
+          if(!r.ok) return null;
+          return r.json();
+        })
         .then(data => {
-          const st = (data && data.status) || 'none';
-          if(st === 'pending' || st === 'running'){
-            el.classList.remove('d-none');
-          } else {
-            el.classList.add('d-none');
+          if(data){
+            const st = (data && data.status) || 'none';
+            if(st === 'pending' || st === 'running'){
+              el.classList.remove('d-none');
+            } else {
+              el.classList.add('d-none');
+            }
           }
         })
-        .catch(() => { /* ignore */ });
+        .catch(() => { /* ignore network errors; handled by backoff below */ })
+        .finally(() => {
+          if(--pending === 0) finalize();
+        });
     });
+
+    function finalize(){
+      // Adjust delay based on whether we saw any 429s
+      if(had429){
+        currentDelay = Math.min(currentDelay * 2, maxDelay);
+      } else {
+        currentDelay = baseDelay;
+      }
+      scheduleNext(currentDelay);
+    }
   }
+
+  // Start immediately, then adapt
   pollSyncBadges();
-  setInterval(pollSyncBadges, 5000);
 })();
 </script>
 {% endblock %}

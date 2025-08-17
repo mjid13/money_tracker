@@ -36,6 +36,8 @@ def _start_account_sync_background(user_id: int, account_number: str):
     """Start a background thread to run initial Gmail sync for an account.
     Prevents concurrent syncs for the same account.
     """
+    from flask import current_app
+
     with _sync_tasks_lock:
         existing = _account_sync_tasks.get(account_number)
         if existing and existing.get('status') in ('pending', 'running'):
@@ -50,29 +52,59 @@ def _start_account_sync_background(user_id: int, account_number: str):
             'user_id': user_id,
         }
 
+    # Capture the real Flask app object to use inside the background thread
+    app = current_app._get_current_object()
+
     def _job():
         from ..services.auto_sync_service import EmailSync
         sync_service = EmailSync()
-        with _sync_tasks_lock:
-            task = _account_sync_tasks.get(account_number)
-            if task:
-                task['status'] = 'running'
-        try:
-            success, message, stats = sync_service.trigger_initial_sync(user_id, account_number)
+        # Ensure Flask application context is available within the background thread
+        with app.app_context():
             with _sync_tasks_lock:
                 task = _account_sync_tasks.get(account_number)
-                if task is not None:
-                    task['status'] = 'completed' if success else 'error'
-                    task['message'] = message
-                    task['stats'] = stats if isinstance(stats, dict) else {}
-                    task['end_time'] = time.time()
-        except Exception as e:
-            with _sync_tasks_lock:
-                task = _account_sync_tasks.get(account_number)
-                if task is not None:
-                    task['status'] = 'error'
-                    task['message'] = str(e)
-                    task['end_time'] = time.time()
+                if task:
+                    task['status'] = 'running'
+            try:
+                success, message, stats = sync_service.trigger_initial_sync(user_id, account_number)
+
+                # Auto-categorize transactions after successful sync
+                if success:
+                    try:
+                        categorized_count = counterparty_service.auto_categorize_all_transactions(user_id)
+                        # Update stats to include categorization info
+                        if isinstance(stats, dict):
+                            stats['auto_categorized'] = categorized_count
+                        else:
+                            stats = {'auto_categorized': categorized_count}
+
+                        # Update message to include categorization results
+                        if categorized_count > 0:
+                            message += f" Auto-categorized {categorized_count} transactions."
+
+                        logger.info(
+                            f"Auto-categorized {categorized_count} transactions after sync for account {account_number}")
+                    except Exception as e:
+                        logger.error(f"Error during auto-categorization after sync: {str(e)}")
+                        # Don't fail the entire sync due to categorization errors
+                        if isinstance(stats, dict):
+                            stats['auto_categorize_error'] = str(e)
+                        else:
+                            stats = {'auto_categorize_error': str(e)}
+
+                with _sync_tasks_lock:
+                    task = _account_sync_tasks.get(account_number)
+                    if task is not None:
+                        task['status'] = 'completed' if success else 'error'
+                        task['message'] = message
+                        task['stats'] = stats if isinstance(stats, dict) else {}
+                        task['end_time'] = time.time()
+            except Exception as e:
+                with _sync_tasks_lock:
+                    task = _account_sync_tasks.get(account_number)
+                    if task is not None:
+                        task['status'] = 'error'
+                        task['message'] = str(e)
+                        task['end_time'] = time.time()
 
     t = Thread(target=_job, daemon=True)
     t.start()
@@ -248,11 +280,10 @@ def add_account():
                     "account/add_account.html", email_configs=email_configs, banks=banks
                 )
 
-            count = counterparty_service.auto_categorize_all_transactions(user_id)
-            flash(f"Auto-categorized {count} transactions", "success")
-
             return redirect(url_for("main.dashboard", acc=account_data.get('account_number')))
-        return  redirect(url_for("account.accounts"))
+
+        # For GET requests, render the form
+        return render_template("account/add_account.html", email_configs=email_configs, banks=banks)
     except Exception as e:
         logger.error(f"Error adding account: {str(e)}")
         flash("Error adding account. Please try again.", "error")
