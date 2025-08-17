@@ -229,33 +229,54 @@ def update_gmail_settings():
 @oauth_bp.route("/gmail/sync", methods=['POST'])
 @login_required
 def sync_gmail():
-    """Manually trigger Gmail sync."""
+    """Manually trigger Gmail sync in the background for the user's accounts."""
     user_id = session.get('user_id')
-    
+
     try:
-        # Check if sync is already in progress
+        # Ensure Gmail integration is enabled
         email_config = oauth_service.get_email_config(user_id)
-        if email_config and email_config.sync_status == 'syncing':
+        if not email_config or not getattr(email_config, 'enabled', False):
             return jsonify({
                 'success': False,
-                'message': 'Gmail sync is already in progress'
+                'message': 'Gmail integration is not enabled.'
             })
-        
-        # Start sync process (this could be moved to a background task)
-        success, message, stats = gmail_service.sync_gmail_messages(user_id)
-        
-        return jsonify({
-            'success': success,
-            'message': message,
-            'stats': stats
-        })
-        
+
+        # Import here to avoid circular imports at module load time
+        from .account import _start_account_sync_background
+        from ..models.models import Account
+
+        # Fetch user's accounts
+        db_session = db.get_session()
+        try:
+            accounts = db_session.query(Account).filter_by(user_id=user_id).all()
+        finally:
+            db.close_session(db_session)
+
+        # Start background sync for each account; prevent duplicates handled inside helper
+        started_count = 0
+        for acc in accounts:
+            try:
+                if _start_account_sync_background(user_id, acc.account_number):
+                    started_count += 1
+            except Exception as e:
+                logger.error(f"Failed to start background sync for account {acc.account_number}: {e}")
+
+        if started_count == 0:
+            # Flash success message
+            success_message = "Gmail sync is already running or no accounts to sync."
+            flash(success_message, "success")
+            return redirect(url_for("main.dashboard"))
+
+        success_message = f'Started Gmail sync in background for {started_count} account(s).'
+        flash(success_message, "success")
+        return redirect(url_for("main.dashboard"))
+
+
     except Exception as e:
-        logger.error(f"Error syncing Gmail: {e}")
-        return jsonify({
-            'success': False,
-            'message': f'Sync failed: {str(e)}'
-        })
+        logger.error(f"Error starting Gmail sync: {e}")
+        success_message = f'Failed to start sync: {str(e)}'
+        flash(success_message, "error")
+        return redirect(url_for("main.dashboard"))
 
 
 @oauth_bp.route("/gmail/status")
