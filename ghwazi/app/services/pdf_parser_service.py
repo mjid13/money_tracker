@@ -37,6 +37,19 @@ class PDFTableExtractor:
         """
         self.pdf_path = pdf_path
         self.doc = fitz.open(pdf_path)
+        # Reject encrypted or empty PDFs early
+        if getattr(self.doc, "needs_pass", False):
+            try:
+                self.doc.close()
+            except Exception:
+                pass
+            raise ValueError("Encrypted/password-protected PDFs are not supported.")
+        if len(self.doc) == 0:
+            try:
+                self.doc.close()
+            except Exception:
+                pass
+            raise ValueError("Invalid PDF: document has no pages.")
         # Cache for table structures and extracted tables
         self._table_structures_cache = None
         self._extracted_tables_cache = None
