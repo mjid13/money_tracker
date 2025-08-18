@@ -440,7 +440,7 @@ class GmailService:
             # Search and process messages
             messages = self.search_messages(oauth_user, gmail_config, max_results=100)
 
-            logger.error(f'thie the search result: {messages}')
+            logger.debug(f'thie the search result: {messages}')
             stats = {
                 'messages_found': len(messages),
                 'messages_processed': 0,
