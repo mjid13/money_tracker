@@ -267,7 +267,7 @@ def sync_gmail():
             flash(success_message, "success")
             return redirect(url_for("main.dashboard"))
 
-        success_message = f'Started Gmail sync in background for {started_count} account(s).'
+        success_message = f'Started Gmail sync for {started_count} account(s).'
         flash(success_message, "success")
         return redirect(url_for("main.dashboard"))
 
