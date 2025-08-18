@@ -528,7 +528,7 @@ class TransactionParser:
             )
             if match:
                 groups = match.groups()
-                day, month, year = groups[0:3]
+                month, day, year = groups[0:3]
 
                 # Handle two-digit years properly
                 if len(year) == 2:
