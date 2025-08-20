@@ -2,7 +2,45 @@
 Template filters for safe output encoding and data formatting.
 These filters ensure that all output is properly encoded to prevent XSS attacks.
 """
+from flask import current_app
+from flask_babel import get_locale
 
+def format_currency_rtl(amount, currency='USD'):
+    """Format currency for RTL languages."""
+    try:
+        locale = get_locale()
+        if locale and str(locale).startswith('ar'):
+            # For Arabic, show currency after the number
+            formatted_amount = "{:,.3f}".format(float(amount))
+            return f"{formatted_amount} {currency}"
+        else:
+            # For English, show currency before
+            formatted_amount = "{:,.3f}".format(float(amount))
+            return f"{currency} {formatted_amount}"
+    except:
+        return f"{amount:,.3f} {currency}"
+
+def format_number_rtl(number):
+    """Format numbers for RTL languages with proper locale."""
+    try:
+        locale = get_locale()
+        if locale and str(locale).startswith('ar'):
+            # Use Western Arabic numerals for better readability
+            return "{:,}".format(int(number))
+        else:
+            return "{:,}".format(int(number))
+    except:
+        return str(number)
+
+def register_template_filters(app):
+    """Register custom template filters."""
+    app.jinja_env.filters['currency_rtl'] = format_currency_rtl
+    app.jinja_env.filters['number_rtl'] = format_number_rtl
+
+def register_template_globals(app):
+    """Register template globals."""
+    # Add any template globals here
+    pass
 import html
 import json
 import urllib.parse
