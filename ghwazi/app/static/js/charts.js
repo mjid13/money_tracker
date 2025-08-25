@@ -501,7 +501,7 @@ function updateCategoryChartInstance(chartData) {
                                     }
 
                                     return {
-                                        text: `${displayLabel} (${percentage}%)`,
+                                        text: `${displayLabel}`,
                                         fillStyle: dataset.backgroundColor[i],
                                         strokeStyle: dataset.borderColor ? dataset.borderColor[i] : dataset.backgroundColor[i],
                                         lineWidth: dataset.borderWidth || 0,
@@ -616,17 +616,14 @@ function createCategoryFilter() {
                     <label for="expense-filter" class="filter-toggle-label" data-filter="expense">
                         <div class="label-icon expense-label">
                             <div class="icon-ring">
-                                <div class="minus-line"></div>
+                                <div class="arrow-down"></div>
                             </div>
                         </div>
                     </label>
                     <label for="income-filter" class="filter-toggle-label" data-filter="income">
                         <div class="label-icon income-label">
                             <div class="icon-ring">
-                                <div class="plus-lines">
-                                    <div class="plus-horizontal"></div>
-                                    <div class="plus-vertical"></div>
-                                </div>
+                                <div class="arrow-up"></div>
                             </div>
                         </div>
                     </label>
@@ -787,7 +784,7 @@ function fetchCategoryChartData(accountNumber, dateRange, categoryType) {
                                             }
 
                                             return {
-                                                text: `${displayLabel} (${percentage}%)`,
+                                                text: `${displayLabel}`,
                                                 fillStyle: dataset.backgroundColor[i],
                                                 strokeStyle: dataset.borderColor ? dataset.borderColor[i] : dataset.backgroundColor[i],
                                                 lineWidth: dataset.borderWidth || 0,
