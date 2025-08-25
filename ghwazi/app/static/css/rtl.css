@@ -210,6 +210,74 @@
     order: -1;
 }
 
+/* Filter toggle RTL support */
+[dir="rtl"] .filter-toggle-container {
+    direction: ltr; /* Keep toggle mechanics LTR for proper functionality */
+}
+
+[dir="rtl"] .filter-toggle-track {
+    direction: ltr; /* Maintain slider direction */
+}
+
+/*!* RTL adjustments for filter toggle labels *!*/
+[dir="rtl"] .filter-toggle-label:first-of-type {
+    border-radius: 16px 0 0 16px; /* Keep original radius for functionality */
+}
+
+[dir="rtl"] .filter-toggle-label:last-of-type {
+    border-radius: 0 16px 16px 0; /* Keep original radius for functionality */
+}
+
+/* Ensure slider positions work correctly in RTL */
+[dir="rtl"] #expense-filter:checked ~ .filter-toggle-track .filter-toggle-slider {
+    left: 0;
+}
+
+[dir="rtl"] #income-filter:checked ~ .filter-toggle-track .filter-toggle-slider {
+    left: 50%;
+}
+
+/* Category filter wrapper RTL positioning */
+[dir="rtl"] .category-chart-filter {
+    justify-content: center; /* Center the toggle */
+}
+
+/* Ensure toggle wrapper maintains its position */
+[dir="rtl"] .filter-toggle-wrapper {
+    direction: ltr; /* Keep the entire wrapper LTR for functionality */
+}
+
+/* Fix icon positioning in RTL */
+[dir="rtl"] .filter-toggle-wrapper .butter-icon,
+[dir="rtl"] .filter-toggle-wrapper .label-icon {
+    direction: ltr;
+}
+
+/* Maintain proper icon order in RTL */
+[dir="rtl"] .filter-toggle-wrapper .icon-circle {
+    direction: ltr;
+}
+
+/* Ensure radio inputs work correctly in RTL */
+[dir="rtl"] .filter-toggle-wrapper input[type="radio"] {
+    direction: ltr;
+}
+
+/* Fix slider animation in RTL */
+[dir="rtl"] .filter-toggle-slider {
+    direction: ltr;
+}
+
+/* Ensure proper spacing in chart card headers with RTL */
+[dir="rtl"] .chart-card .card-header .d-flex {
+    align-items: center;
+}
+
+[dir="rtl"] .chart-card .card-header .chart-title {
+    margin-left: auto;
+    margin-right: 0;
+}
+
 /* Badge positioning in cards RTL */
 [dir="rtl"] .badge.bg-primary.bg-opacity-10 {
     text-align: center;
