@@ -505,9 +505,12 @@ class OAuthUser(Base):
         self.updated_at = datetime.utcnow()
 
     def revoke_access(self):
-        """Revoke OAuth access by clearing tokens."""
-        self.access_token_encrypted = None
-        self.refresh_token_encrypted = None
+        """Revoke OAuth access by clearing tokens.
+        Note: Use empty strings for token fields to satisfy NOT NULL constraints while
+        ensuring decrypt_token() returns None (it treats falsy values as missing).
+        """
+        self.access_token_encrypted = ''
+        self.refresh_token_encrypted = ''
         self.token_expires_at = None
         self.is_active = False
         self.updated_at = datetime.utcnow()
