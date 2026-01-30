@@ -105,7 +105,7 @@ def dashboard():
                 # Import necessary modules for data aggregation
                 from datetime import datetime, timedelta
                 from sqlalchemy import case, extract, func
-                from ..models.models import Category, Transaction, TransactionType
+                from ..models.models import Transaction, TransactionType
 
                 logger.info("Generating chart data for dashboard")
 
