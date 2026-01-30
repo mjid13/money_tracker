@@ -84,9 +84,7 @@ class EmailManuConfigs(Base):
     email_host = Column(String(100), nullable=False)
     email_port = Column(Integer, nullable=False)
     email_username = Column(String(100), nullable=False)
-    email_password = Column(
-        String(200), nullable=False
-    )  # Should be encrypted in production
+    _email_password = Column("email_password", String(200), nullable=False)
     email_use_ssl = Column(Boolean, default=True)
     service_provider_id = Column(
         Integer, ForeignKey("email_service_providers.id"), nullable=True
@@ -104,6 +102,53 @@ class EmailManuConfigs(Base):
         "EmailConfigBank", back_populates="email_config", cascade="all, delete-orphan"
     )
     banks = relationship("Bank", secondary="email_config_banks", viewonly=True)
+
+    @property
+    def encryption_key(self):
+        """Get encryption key for email credentials."""
+        secret_key = current_app.config.get("SECRET_KEY")
+        if not secret_key:
+            raise ValueError("SECRET_KEY not configured")
+
+        import hashlib
+
+        key_material = hashlib.sha256(secret_key.encode()).digest()[:32]
+        return base64.urlsafe_b64encode(key_material)
+
+    @staticmethod
+    def _looks_encrypted(value):
+        return isinstance(value, str) and value.startswith("gAAAA")
+
+    def encrypt_password(self, password):
+        if not password:
+            return None
+        f = Fernet(self.encryption_key)
+        return f.encrypt(password.encode()).decode()
+
+    def decrypt_password(self, encrypted_password):
+        if not encrypted_password:
+            return None
+        if not self._looks_encrypted(encrypted_password):
+            # Legacy plaintext value; return as-is for backward compatibility.
+            try:
+                self._email_password = self.encrypt_password(encrypted_password)
+            except Exception:
+                pass
+            return encrypted_password
+        try:
+            f = Fernet(self.encryption_key)
+            return f.decrypt(encrypted_password.encode()).decode()
+        except Exception as e:
+            current_app.logger.error(f"Failed to decrypt email password: {e}")
+            return None
+
+    @property
+    def email_password(self):
+        return self.decrypt_password(self._email_password)
+
+    @email_password.setter
+    def email_password(self, password):
+        self._email_password = self.encrypt_password(password)
 
 class EmailMetadata(Base):
     """Email metadata model for storing email information."""
