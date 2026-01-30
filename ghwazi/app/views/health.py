@@ -4,10 +4,11 @@ Health check endpoints for monitoring application status and dependencies.
 
 import logging
 import os
+import secrets
 import time
 from datetime import datetime, timedelta
 
-from flask import Blueprint, jsonify, current_app
+from flask import Blueprint, jsonify, current_app, request
 from sqlalchemy import text
 
 from ..models.database import Database
@@ -18,6 +19,27 @@ from ..services.session_service import SessionService
 health_bp = Blueprint("health", __name__)
 
 logger = logging.getLogger(__name__)
+
+
+def _health_access_allowed():
+    token = current_app.config.get("HEALTHCHECK_TOKEN") or os.environ.get("HEALTHCHECK_TOKEN")
+    if token:
+        provided = request.headers.get("X-Health-Token") or request.args.get("health_token")
+        return secrets.compare_digest((provided or ""), token)
+
+    if current_app.debug or current_app.testing:
+        return True
+
+    return request.remote_addr in {"127.0.0.1", "::1"}
+
+
+@health_bp.before_request
+def enforce_health_access():
+    if request.endpoint == "health.basic_health":
+        return None
+    if _health_access_allowed():
+        return None
+    return jsonify({"status": "unavailable"}), 404
 
 
 @health_bp.route("/")

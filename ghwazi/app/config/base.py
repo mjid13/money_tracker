@@ -89,6 +89,9 @@ class Config:
             'client_secret': GOOGLE_CLIENT_SECRET,
         }
     }
+
+    # Health check protection
+    HEALTHCHECK_TOKEN = os.environ.get("HEALTHCHECK_TOKEN")
     
     # Security Headers Configuration
     SECURITY_HEADERS = {
