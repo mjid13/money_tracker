@@ -306,7 +306,7 @@ def get_chart_data():
         return jsonify(chart_data)
     except Exception as e:
         logger.error(f"Error getting chart data: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
     finally:
         db.close_session(db_session)
 
@@ -422,7 +422,7 @@ def get_category_chart_data():
 
     except Exception as e:
         logger.error(f"Error getting category chart data: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
     finally:
         db.close_session(db_session)
 
@@ -606,10 +606,10 @@ def upload_pdf():
                         return jsonify(
                             {
                                 "success": False,
-                                "message": f"Error saving to database: {str(e)}",
+                                "message": "Error saving to database",
                             }
                         )
-                    flash(f"Error saving to database: {str(e)}", "error")
+                    flash("Error saving to database", "error")
                     return redirect(url_for("dashboard"))
                 finally:
                     db.close_session(db_session)
@@ -628,10 +628,10 @@ def upload_pdf():
                     return jsonify(
                         {
                             "success": False,
-                            "message": f"Error parsing PDF file: {str(e)}",
+                            "message": "Error parsing PDF file",
                         }
                     )
-                flash(f"Error parsing PDF file: {str(e)}", "error")
+                flash("Error parsing PDF file", "error")
                 # Clean up the uploaded file if it exists
                 if filepath and os.path.exists(filepath):
                     try:
