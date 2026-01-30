@@ -453,7 +453,7 @@ def update_transaction_category(transaction_id):
 
         if updated_transaction:
             # Get the category name for the response
-        category_name = category.name if category else "Uncategorized"
+            category_name = category.name if category else "Uncategorized"
 
             if is_ajax:
                 return jsonify(
