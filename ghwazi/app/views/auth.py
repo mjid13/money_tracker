@@ -13,6 +13,7 @@ from ..extensions import limiter
 from ..models.database import Database
 from ..models.transaction import TransactionRepository
 from ..models.user import User
+from ..utils.validators import validate_password
 
 # Create blueprint
 auth_bp = Blueprint("auth", __name__)
@@ -38,6 +39,11 @@ def register():
 
         if password != confirm_password:
             flash("Passwords do not match", "error")
+            return render_template("auth/register.html")
+
+        is_valid_password, password_message = validate_password(password)
+        if not is_valid_password:
+            flash(password_message, "error")
             return render_template("auth/register.html")
 
         db_session = db.get_session()

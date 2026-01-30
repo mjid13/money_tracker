@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from secrets import token_urlsafe
+from werkzeug.security import generate_password_hash
 
 from flask import current_app, session, url_for
 from google.auth.transport.requests import Request
@@ -234,7 +235,7 @@ class GoogleOAuthService:
                             user = User(
                                 username=user_info['email'].split('@')[0],
                                 email=user_info['email'],
-                                password_hash=token_urlsafe(48) # Use access token as placeholder password
+                                password_hash=generate_password_hash(token_urlsafe(48))
                             )
                             db_session.add(user)
                             db_session.flush()  # Get user ID

@@ -206,6 +206,23 @@ class Database:
 
                         logger.info(f"Added user_id column to {table_name} table")
 
+            # Ensure users table has role column
+            if "users" in inspector.get_table_names():
+                columns = [column["name"] for column in inspector.get_columns("users")]
+                if "role" not in columns:
+                    from sqlalchemy.sql import text
+
+                    with self.engine.connect() as connection:
+                        connection.execute(
+                            text("ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'user'")
+                        )
+                        connection.execute(
+                            text("UPDATE users SET role = 'user' WHERE role IS NULL")
+                        )
+                        connection.commit()
+
+                    logger.info("Added role column to users table")
+
             # Check if transactions table exists and has email_metadata_id column
             if "transactions" in inspector.get_table_names():
                 columns = [

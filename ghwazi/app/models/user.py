@@ -15,10 +15,14 @@ class User(Base):
 
     __tablename__ = "users"
 
+    ROLE_ADMIN = "admin"
+    ROLE_USER = "user"
+
     id = Column(Integer, primary_key=True)
     username = Column(String(50), unique=True, nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     password_hash = Column(String(200), nullable=False)
+    role = Column(String(20), nullable=False, default=ROLE_USER)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -83,3 +87,22 @@ class User(Base):
 
             logger.error(f"Traceback: {traceback.format_exc()}")
             return False
+
+    def has_role(self, role):
+        """Check if user has a specific role."""
+        if not role:
+            return False
+        return self.role == role
+
+    def has_permission(self, permission):
+        """Check if user has a specific permission."""
+        role_permissions = {
+            "admin_access": {self.ROLE_ADMIN},
+        }
+        allowed_roles = role_permissions.get(permission, set())
+        return self.role in allowed_roles
+
+    @property
+    def is_admin(self):
+        """Convenience property for admin role checks."""
+        return self.has_role(self.ROLE_ADMIN)
