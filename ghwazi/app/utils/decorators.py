@@ -11,6 +11,7 @@ from .error_handlers import (
     SecureErrorHandler, handle_validation_error, 
     handle_permission_error, handle_rate_limit_error
 )
+from ..services.user_service import UserService
 
 
 def login_required(f):
@@ -93,11 +94,8 @@ def require_admin(f):
                 flash('Please log in to access this page.', 'info')
                 return redirect(url_for('auth.login'))
         
-        # Check if user is admin (you'll need to implement this check based on your user model)
-        # This is a placeholder - replace with your actual admin check logic
-        user_is_admin = session.get('is_admin', False)
-        
-        if not user_is_admin:
+        user = UserService().get_user_by_id(session.get('user_id'))
+        if not user or not user.has_permission("admin_access"):
             return handle_permission_error(
                 Forbidden("Administrator privileges required"),
                 required_permission="admin_access"

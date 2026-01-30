@@ -35,8 +35,6 @@ def _health_access_allowed():
 
 @health_bp.before_request
 def enforce_health_access():
-    if request.endpoint == "health.basic_health":
-        return None
     if _health_access_allowed():
         return None
     return jsonify({"status": "unavailable"}), 404

@@ -14,10 +14,22 @@ from ..services.session_lifecycle import SessionLifecycleManager
 from ..services.session_monitor import get_session_monitor
 from ..services.session_migration import get_migration_manager
 from ..services.session_persistence import get_persistence_manager
+from ..services.user_service import UserService
 from ..utils.decorators import login_required
 
 session_bp = Blueprint("session", __name__)
 logger = logging.getLogger(__name__)
+
+
+def _is_admin_user(user_id):
+    if not user_id:
+        return False
+    try:
+        user = UserService().get_user_by_id(user_id)
+        return bool(user and user.has_permission("admin_access"))
+    except Exception as e:
+        logger.error(f"Failed to load user for admin check: {e}")
+        return False
 
 
 @session_bp.route("/set-lang")
@@ -76,8 +88,7 @@ def session_stats():
     """Get session statistics (admin only)."""
     user_id = session.get("user_id")
     
-    # Simple admin check - in production, implement proper role-based access
-    if user_id != 1:  # Assuming user ID 1 is admin
+    if not _is_admin_user(user_id):
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
@@ -123,8 +134,7 @@ def force_cleanup():
     """Force cleanup of expired sessions (admin only)."""
     user_id = session.get("user_id")
     
-    # Simple admin check - in production, implement proper role-based access
-    if user_id != 1:  # Assuming user ID 1 is admin
+    if not _is_admin_user(user_id):
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
@@ -178,7 +188,7 @@ def lifecycle_info(session_id: str):
     current_session_id = session.get("session_id")
     
     # Only allow users to see their own sessions or admin to see all
-    if user_id != 1 and session_id != current_session_id:  # Simple admin check
+    if not _is_admin_user(user_id) and session_id != current_session_id:
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
@@ -199,8 +209,7 @@ def monitoring_alerts():
     """Get session monitoring alerts."""
     user_id = session.get("user_id")
     
-    # Simple admin check
-    if user_id != 1:
+    if not _is_admin_user(user_id):
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
@@ -222,8 +231,7 @@ def monitoring_metrics():
     """Get comprehensive session metrics."""
     user_id = session.get("user_id")
     
-    # Simple admin check
-    if user_id != 1:
+    if not _is_admin_user(user_id):
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
@@ -253,7 +261,7 @@ def user_session_health(target_user_id: int):
     user_id = session.get("user_id")
     
     # Users can only see their own health, admins can see all
-    if user_id != 1 and user_id != target_user_id:
+    if not _is_admin_user(user_id) and user_id != target_user_id:
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
@@ -272,8 +280,7 @@ def migration_status():
     """Get migration system status."""
     user_id = session.get("user_id")
     
-    # Admin only
-    if user_id != 1:
+    if not _is_admin_user(user_id):
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
@@ -315,8 +322,7 @@ def backup_sessions():
     """Create a backup of session data."""
     user_id = session.get("user_id")
     
-    # Admin only
-    if user_id != 1:
+    if not _is_admin_user(user_id):
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
@@ -344,8 +350,7 @@ def acknowledge_alert(alert_id: str):
     """Acknowledge a session monitoring alert."""
     user_id = session.get("user_id")
     
-    # Admin only
-    if user_id != 1:
+    if not _is_admin_user(user_id):
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
@@ -368,8 +373,7 @@ def database_session_stats():
     """Get database session management statistics."""
     user_id = session.get("user_id")
     
-    # Admin only
-    if user_id != 1:
+    if not _is_admin_user(user_id):
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
@@ -411,8 +415,7 @@ def database_force_cleanup():
     """Force cleanup of leaked database sessions (admin only)."""
     user_id = session.get("user_id")
     
-    # Admin only
-    if user_id != 1:
+    if not _is_admin_user(user_id):
         return jsonify({'error': 'Unauthorized'}), 403
     
     try:
