@@ -95,6 +95,37 @@
     text-align: right;
 }
 
+[dir="rtl"] .app-shell {
+    flex-direction: row-reverse;
+}
+
+[dir="rtl"] .app-sidebar {
+    border-right: 0;
+    border-left: 1px solid var(--neutral-200);
+    order: 2;
+}
+
+[dir="rtl"] .app-main {
+    order: 1;
+}
+
+[dir="rtl"] .app-sidebar-link {
+    flex-direction: row-reverse;
+    text-align: right;
+}
+
+[dir="rtl"] .app-topbar .container-fluid {
+    flex-direction: row-reverse;
+}
+
+[dir="rtl"] body.sidebar-collapsed .app-sidebar-link {
+    justify-content: center;
+}
+
+[dir="rtl"] .app-sidebar-action .app-sidebar-link {
+    text-align: right;
+}
+
 [dir="rtl"] .dropdown-item {
     text-align: right;
 }
