@@ -11,6 +11,7 @@ Automatically parse bank emails, track accounts, and analyze spending from a sin
 ---
 
 ## Overview
+'Ghwazi' is the Arabic-Omani word for 'Money'.
 
 This repository contains a Flask-based personal finance app focused on parsing bank transaction emails and turning them into structured accounts, transactions, and insights. It supports both IMAP (manual email configs) and Gmail OAuth, includes PDF statement parsing, and provides dashboards, budgets, and category tools.
 
