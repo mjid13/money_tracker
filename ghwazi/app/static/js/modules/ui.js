@@ -31,23 +31,27 @@ export class ThemeManager {
   }
 
   updateToggleIcon(theme) {
-    const toggle = DOM.query('#theme-toggle');
-    if (!toggle) return;
+    const toggles = DOM.queryAll('.theme-toggle');
+    if (!toggles.length) return;
 
-    const icon = DOM.query('i', toggle);
-    if (icon) {
-      icon.className = theme === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
-    }
+    toggles.forEach((toggle) => {
+      const icon = DOM.query('i', toggle);
+      if (icon) {
+        icon.className = theme === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
+      }
+    });
   }
 
   bindToggleButton() {
-    const toggle = DOM.query('#theme-toggle');
-    if (!toggle) return;
+    const toggles = DOM.queryAll('.theme-toggle');
+    if (!toggles.length) return;
 
-    DOM.on(toggle, 'click', () => {
-      const currentTheme = document.documentElement.getAttribute('data-bs-theme');
-      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-      this.setTheme(newTheme);
+    toggles.forEach((toggle) => {
+      DOM.on(toggle, 'click', () => {
+        const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        this.setTheme(newTheme);
+      });
     });
   }
 

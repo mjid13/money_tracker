@@ -150,8 +150,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Theme toggle RTL support
 document.addEventListener('DOMContentLoaded', function() {
-    const themeToggle = document.getElementById('theme-toggle');
-    if (themeToggle) {
+    const themeToggles = document.querySelectorAll('.theme-toggle');
+    if (!themeToggles.length) return;
+
+    themeToggles.forEach((themeToggle) => {
         themeToggle.addEventListener('click', function() {
             const isRTL = document.documentElement.getAttribute('dir') === 'rtl';
             if (isRTL) {
@@ -161,5 +163,5 @@ document.addEventListener('DOMContentLoaded', function() {
                 }, 100);
             }
         });
-    }
+    });
 });

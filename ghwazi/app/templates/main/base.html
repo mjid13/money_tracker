@@ -59,6 +59,33 @@
                 <img src="{{ url_for('static', filename='images/logo/logo_with_brand_name.png') }}" alt="GHWAZI" height="34" loading="lazy">
             </a>
             <div class="d-flex align-items-center gap-2">
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary app-topbar-action dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-translate"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        {% if languages %}
+                            {% for lang_code, lang_info in languages.items() %}
+                            <li>
+                                <a class="dropdown-item {% if lang_code == current_locale %}active{% endif %}" 
+                                   href="{{ url_for('session.set_language') }}?lang={{ lang_code }}">
+                                    {{ lang_info['name'] }}
+                                    {% if lang_code == current_locale %}
+                                        <i class="bi bi-check-circle-fill text-success ms-2"></i>
+                                    {% endif %}
+                                </a>
+                            </li>
+                            {% endfor %}
+                        {% else %}
+                            <li><a class="dropdown-item" href="{{ url_for('session.set_language') }}?lang=en">English</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('session.set_language') }}?lang=ar">العربية</a></li>
+                        {% endif %}
+                    </ul>
+                </div>
+                <button class="btn btn-outline-secondary app-topbar-action theme-toggle" type="button">
+                    <i class="bi bi-moon-stars"></i>
+                </button>
+            </div>
         </div>
     </div>
 
