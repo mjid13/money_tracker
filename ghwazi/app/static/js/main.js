@@ -6,16 +6,18 @@ if (loadingSpinner) {
 
 // Dark mode toggle function
 function initThemeToggle() {
-    const themeToggle = document.getElementById('theme-toggle');
-    if (!themeToggle) return;
+    const themeToggles = document.querySelectorAll('.theme-toggle');
+    if (!themeToggles.length) return;
     
     const html = document.documentElement;
-    const icon = themeToggle.querySelector('i');
     
     function updateThemeIcon(isDark) {
-        if (icon) {
-            icon.className = isDark ? 'bi bi-sun' : 'bi bi-moon-stars';
-        }
+        themeToggles.forEach((toggle) => {
+            const icon = toggle.querySelector('i');
+            if (icon) {
+                icon.className = isDark ? 'bi bi-sun' : 'bi bi-moon-stars';
+            }
+        });
     }
     
     // Check for saved theme preference
@@ -25,12 +27,14 @@ function initThemeToggle() {
         updateThemeIcon(savedTheme === 'dark');
     }
     
-    themeToggle.addEventListener('click', () => {
-        const isDark = html.getAttribute('data-bs-theme') === 'dark';
-        const newTheme = isDark ? 'light' : 'dark';
-        html.setAttribute('data-bs-theme', newTheme);
-        localStorage.setItem('theme', newTheme);
-        updateThemeIcon(!isDark);
+    themeToggles.forEach((toggle) => {
+        toggle.addEventListener('click', () => {
+            const isDark = html.getAttribute('data-bs-theme') === 'dark';
+            const newTheme = isDark ? 'light' : 'dark';
+            html.setAttribute('data-bs-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(!isDark);
+        });
     });
 }
 
@@ -48,6 +52,12 @@ document.addEventListener('click', (e) => {
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize theme toggle
     initThemeToggle();
+
+    // Initialize sidebar collapse on desktop
+    initSidebarCollapse();
+
+    // Auto-close mobile sidebar after selecting a link
+    initOffcanvasSidebarAutoClose();
     
     const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
     tooltips.forEach(tooltip => new bootstrap.Tooltip(tooltip));
@@ -116,6 +126,74 @@ window.addEventListener('load', () => {
     }
   }, true);
 })();
+
+// Sidebar collapse for desktop
+function initSidebarCollapse() {
+    const toggle = document.getElementById('sidebar-collapse-toggle');
+    const sidebar = document.querySelector('.app-sidebar');
+    if (!toggle || !sidebar) return;
+
+    const storageKey = 'sidebar-collapsed';
+    const isRTL = document.documentElement.getAttribute('dir') === 'rtl';
+
+    function setTooltips(enabled) {
+        const links = document.querySelectorAll('.app-sidebar-link[data-sidebar-label]');
+        links.forEach((link) => {
+            const label = link.getAttribute('data-sidebar-label');
+            if (!label) return;
+            if (enabled) {
+                link.setAttribute('title', label);
+                link.setAttribute('data-bs-toggle', 'tooltip');
+                link.setAttribute('data-bs-placement', isRTL ? 'left' : 'right');
+                if (!link._tooltipInstance) {
+                    link._tooltipInstance = new bootstrap.Tooltip(link);
+                }
+            } else {
+                if (link._tooltipInstance) {
+                    link._tooltipInstance.dispose();
+                    link._tooltipInstance = null;
+                }
+                link.removeAttribute('title');
+                link.removeAttribute('data-bs-toggle');
+                link.removeAttribute('data-bs-placement');
+            }
+        });
+    }
+
+    function applyCollapsedState(collapsed) {
+        document.body.classList.toggle('sidebar-collapsed', collapsed);
+        setTooltips(collapsed);
+        const icon = toggle.querySelector('i');
+        if (icon) {
+            icon.className = collapsed ? 'bi bi-layout-sidebar' : 'bi bi-layout-sidebar-inset';
+        }
+        const label = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+        toggle.setAttribute('aria-label', label);
+        toggle.setAttribute('title', label);
+    }
+
+    const saved = localStorage.getItem(storageKey);
+    const isCollapsed = saved === 'true';
+    applyCollapsedState(isCollapsed);
+
+    toggle.addEventListener('click', () => {
+        const next = !document.body.classList.contains('sidebar-collapsed');
+        localStorage.setItem(storageKey, next ? 'true' : 'false');
+        applyCollapsedState(next);
+    });
+}
+
+function initOffcanvasSidebarAutoClose() {
+    const offcanvasEl = document.getElementById('sidebarOffcanvas');
+    if (!offcanvasEl) return;
+
+    const offcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+    offcanvasEl.addEventListener('click', (event) => {
+        const link = event.target.closest('.app-sidebar-link');
+        if (!link || link.tagName !== 'A') return;
+        offcanvas.hide();
+    });
+}
 
 // Budget form enhancements
 document.addEventListener('DOMContentLoaded', function() {

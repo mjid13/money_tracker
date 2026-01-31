@@ -979,7 +979,10 @@ msgid "budget"
 msgstr "ميزانية"
 
 msgid "budgets"
-msgstr "ميزانيات"
+msgstr "الميزانيات"
+
+msgid "Budgets"
+msgstr "الميزانيات"
 
 msgid "configured"
 msgstr "تم تكوينها"
@@ -1124,8 +1127,15 @@ msgid "Track your finances and your transactions all in one place."
 msgstr "تتبّع أموالك ومعاملاتك في مكان واحد."
 
 
-msgid "No counterparties found. Process some transactions first"
+msgid "No counterparties found. Process some transactions first."
 msgstr "لم يتم العثور على الأطراف المقابلة. معالجة بعض المعاملات أولاً."
+
+
+msgid "This is only a example of Terms of Service"
+msgstr "هذا مجرد مثال على شروط الخدمة"
+
+msgid "Welcome to Ghwazi Money Tracker. This is only an example of Privacy Policy."
+msgstr "مرحبا بكم في  'غوازي'  المتتبع المالي الشخصي . هذا مجرد مثال على سياسة الخصوصية."
 
 msgid "Auto-Categorize"
 msgstr "التصنيف التلقائي"
@@ -1519,6 +1529,24 @@ msgstr "اختيار لغة غير صالح"
 
 msgid "Language updated"
 msgstr "تم تحديث اللغة"
+
+msgid "Theme"
+msgstr "المظهر"
+
+msgid "Import PDF"
+msgstr "استيراد ملف PDF"
+
+msgid "Preferences"
+msgstr "التفضيلات"
+
+msgid "Overview"
+msgstr "نظرة عامة"
+
+msgid "Your Google connection is not active. Please reconnect to enable Gmail sync."
+msgstr "اتصال Google غير نشط. يرجى إعادة الاتصال لتمكين مزامنة Gmail."
+
+msgid "Reconnect Google"
+msgstr "إعادة الاتصال بـ Google"
 
 # ---------- Edit Transaction page ----------
 msgid "Edit Transaction"
