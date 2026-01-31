@@ -4,7 +4,7 @@
 
 Automatically parse bank emails, track accounts, and analyze spending from a single Flask app.
 
-[ additionally includes Gmail OAuth + IMAP parsing, PDF statement upload, budgets, and RTL/Arabic UI ]
+[ additionally includes Gmail OAuth, PDF statement upload, budgets, and RTL/Arabic UI ]
 
 </div>
 
