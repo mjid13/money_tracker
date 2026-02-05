@@ -216,8 +216,3 @@ web: gunicorn ghwazi.main:app
 - Default currency and bank presets focus on Omani banks (see `ghwazi/app/models/database.py`).
 - SQLite is used by default for local development; PostgreSQL is recommended for production.
 
----
-
-## License
-
-MIT (see `LICENSE` if present).
